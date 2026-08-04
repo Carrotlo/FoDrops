@@ -1,0 +1,21 @@
+# Need help or want support? Join the Discord: https://discord.gg/kEF77QCfu7
+
+limits:
+  max-profiles: 100
+  max-custom-drops-per-profile: 64
+  max-commands-per-entry: 8
+  max-drop-amount: 64
+
+safety:
+  block-operator-commands: true
+  block-gamemode-commands: true
+
+native-dialogs:
+  # Uses Minecraft's native dialog/input screens for search and text/number input when supported.
+  # Requires a compatible Paper or Paper-fork server with the Dialog API.
+  # Spigot and older versions automatically fall back to inventory/chat GUI mode.
+  # Set this to false to always use inventory/chat GUI mode.
+  enabled: true
+
+  # Sends admins a short warning when native dialogs are enabled but unavailable and the plugin falls back.
+  warn-on-fallback: true

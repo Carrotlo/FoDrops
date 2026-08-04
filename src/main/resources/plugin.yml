@@ -1,0 +1,20 @@
+name: FoDrops
+description: Customizable drop editor for server owners.
+version: '${version}'
+
+main: me.foesio.foDrops.FoDrops
+api-version: '1.21'
+
+authors: [ Carrotio ]
+
+commands:
+  fodrops:
+    description: Main command for FoDrops.
+    usage: /<command> <version|editor|reload>
+    aliases: [ drops ]
+    permission: fodrops.admin
+
+permissions:
+  fodrops.admin:
+    description: Allows full access to FoDrops commands and editor.
+    default: op
