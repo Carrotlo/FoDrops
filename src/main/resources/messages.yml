@@ -66,6 +66,7 @@ prompt-priority: "{prefix} {muted}Type priority as an integer. Type {theme}cance
 prompt-targets: "{prefix} {muted}Type target keys separated by commas (example: {theme}stone{muted}), or {theme}none{muted}. Use {theme}cancel{muted} to abort."
 prompt-mob-search: "{prefix} {muted}Type a mob search term, or {theme}none{muted} to clear. Use {theme}cancel{muted} to abort."
 prompt-world-search: "{prefix} {muted}Type a world search term, or {theme}none{muted} to clear. Use {theme}cancel{muted} to abort."
+prompt-entry-search: "{prefix} {muted}Type an entry search term, or {theme}none{muted} to clear. Use {theme}cancel{muted} to abort."
 prompt-chance: "{prefix} {muted}Type chance {theme}(0-100){muted}. Use {theme}cancel {muted}to abort."
 prompt-amount: "{prefix} {muted}Type amount {theme}(single or min-max, max {max}){muted}. Use {theme}cancel {muted}to abort."
 prompt-worlds: "{prefix} {muted}Type worlds separated by commas, or {theme}none{muted}. Use {theme}cancel{muted} to abort."

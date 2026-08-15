@@ -18,6 +18,10 @@ import me.foesio.core.editor.EditorSaveResult;
 import me.foesio.core.gui.GuiButtonConfig;
 import me.foesio.core.gui.GuiSlots;
 import me.foesio.core.gui.GuiTitles;
+import me.foesio.core.gui.EntryBrowserClick;
+import me.foesio.core.gui.EntryBrowserHolder;
+import me.foesio.core.gui.EntryBrowserMenus;
+import me.foesio.core.gui.EntryBrowserRequest;
 import me.foesio.core.mob.MobChooserActionType;
 import me.foesio.core.mob.MobChooserClick;
 import me.foesio.core.mob.MobChooserHolder;
@@ -290,20 +294,14 @@ public class EditorManager implements Listener {
 
     public void openMainMenu(Player player, int page) {
         List<DropDefinition> drops = dropStore.getAllDrops();
-        int totalPages = Math.max(1, (int) Math.ceil(drops.size() / (double) GRID_SLOTS.length));
-        int finalPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = finalPage * GRID_SLOTS.length;
+        openMainMenu(player, "", page, drops);
+    }
 
-        EditorMenu menu = new EditorMenu(MenuType.MAIN, null, finalPage, -1, 0);
-        Inventory inventory = Bukkit.createInventory(menu, 54, getGuiTitle(TITLE_DROPS));
-        menu.setInventory(inventory);
-
-        int index = 0;
-        for (int i = start; i < drops.size() && index < GRID_SLOTS.length; i++) {
-            DropDefinition definition = drops.get(i);
-            int slot = GRID_SLOTS[index++];
-
-            inventory.setItem(slot, createItem(
+    private void openMainMenu(Player player, String filter, int page, List<DropDefinition> drops) {
+        String normalizedFilter = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
+        List<EntryBrowserRequest.Entry> entries = drops.stream()
+            .filter(definition -> matchesFilter(definition.getId() + " " + definition.getName() + " " + definition.getEventType().getDisplayName(), normalizedFilter))
+            .map(definition -> EntryBrowserRequest.Entry.of(definition.getId(), createItem(
                 Material.CHEST,
                 "{theme}" + definition.getName(),
                 "{white}ID: {theme}" + definition.getId(),
@@ -314,29 +312,23 @@ public class EditorManager implements Listener {
                 "{white}Custom Drops: {theme}" + definition.getCustomDrops().size(),
                 "",
                 "{white}Click to edit this profile."
-            ));
-            menu.dropBySlot.put(slot, definition.getId());
-        }
+            )))
+            .toList();
 
-        fillEmptyDropSlots(inventory, index);
+        EntryBrowserMenus.open(player, EntryBrowserRequest.builder()
+            .title(TITLE_DROPS)
+            .entries(entries)
+            .page(page)
+            .filter(normalizedFilter)
+            .buttons(buttons)
+            .showBack(true)
+            .context(new MainBrowserContext())
+            .addButton(createItem(Material.ANVIL, "{theme}Add Drop", "{white}Create a new drop profile", "{white}and open its editor.", "{white}Limit: {theme}" + drops.size() + "/" + plugin.getMaxProfiles()))
+            .build());
+    }
 
-        inventory.setItem(47, createItem(
-            Material.ANVIL,
-            "{theme}Add Drop",
-            "{white}Create a new drop profile",
-            "{white}and open its editor.",
-            "{white}Limit: {theme}" + drops.size() + "/" + plugin.getMaxProfiles()
-        ));
-        inventory.setItem(49, buttons.back());
-        if (finalPage > 0) {
-            inventory.setItem(45, buttons.previousPage(finalPage, totalPages - 1));
-        }
-        if (finalPage < totalPages - 1) {
-            inventory.setItem(53, buttons.nextPage(finalPage, totalPages - 1));
-        }
-
-        fillBackground(inventory);
-        player.openInventory(inventory);
+    private boolean matchesFilter(String value, String filter) {
+        return filter == null || filter.isBlank() || value.toLowerCase(Locale.ROOT).contains(filter);
     }
 
     public void openDropMenu(Player player, String dropId) {
@@ -627,70 +619,67 @@ public class EditorManager implements Listener {
             openMainMenu(player, 0);
             return;
         }
+        openCustomDropsMenu(player, dropId, "", page);
+    }
 
-        List<CustomDropEntry> entries = definition.getCustomDrops();
-        int totalPages = Math.max(1, (int) Math.ceil(entries.size() / (double) GRID_SLOTS.length));
-        int finalPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = finalPage * GRID_SLOTS.length;
-
-        EditorMenu menu = new EditorMenu(MenuType.CUSTOM, dropId, finalPage, -1, 0);
-        Inventory inventory = Bukkit.createInventory(menu, 54, getGuiTitle(TITLE_CUSTOM));
-        menu.setInventory(inventory);
-
-        int visibleIndex = 0;
-        for (int i = start; i < entries.size() && visibleIndex < GRID_SLOTS.length; i++) {
-            int slot = GRID_SLOTS[visibleIndex++];
-            CustomDropEntry entry = entries.get(i);
-            double expectedValue = (entry.getChance() / 100.0D) * ((entry.getMinAmount() + entry.getMaxAmount()) / 2.0D);
-            String gateLine = definition.getConditions().hasAnyRestrictions()
-                ? "{muted}Profile gate: context-dependent"
-                : "{good}Profile gate: always active";
-
-            ItemStack item = entry.isItemReward() ? entry.getItem() : new ItemStack(Material.COMMAND_BLOCK);
-            ItemMeta meta = item.getItemMeta();
-            if (meta != null) {
-                meta.setDisplayName(plugin.messages().renderTemplate(entry.isItemReward() ? "{theme}Drop #" + (i + 1) : "{theme}Command Reward #" + (i + 1)));
-                List<String> lore = new ArrayList<>();
-                lore.add(plugin.messages().renderTemplate("{white}Type: " + (entry.isItemReward() ? "{theme}Item" : "{theme}Command")));
-                lore.add(plugin.messages().renderTemplate("{white}Chance: {theme}" + trimChance(entry.getChance()) + "%"));
-                if (entry.isItemReward()) {
-                    lore.add(plugin.messages().renderTemplate("{white}Amount: {theme}" + entry.getMinAmount() + " - " + entry.getMaxAmount()));
-                    lore.add(plugin.messages().renderTemplate("{white}Fortune: " + (entry.isRespectFortune() ? "{good}Enabled" : "{bad}Disabled")));
-                    lore.add(plugin.messages().renderTemplate("{white}Delivery: " + formatDeliveryMode(entry.getDeliveryMode())));
-                    lore.add(plugin.messages().renderTemplate("{white}Expected/Trigger: {theme}" + formatDecimal(expectedValue)));
-                }
-                lore.add(plugin.messages().renderTemplate("{white}Message: " + (entry.isSendMessage() ? "{good}Enabled" : "{bad}Disabled")));
-                addCommandRewardLore(lore, entry.getCommands());
-                lore.add(plugin.messages().renderTemplate(gateLine));
-                lore.add(plugin.messages().renderTemplate(""));
-                lore.add(plugin.messages().renderTemplate("{white}Click to edit this entry."));
-                meta.setLore(lore);
-                item.setItemMeta(meta);
+    private void openCustomDropsMenu(Player player, String dropId, String filter, int page) {
+        DropDefinition definition = dropStore.getDrop(dropId);
+        if (definition == null) {
+            plugin.messages().sendConfigured(player, "drop-missing");
+            openMainMenu(player, 0);
+            return;
+        }
+        String normalizedFilter = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
+        List<EntryBrowserRequest.Entry> entries = new ArrayList<>();
+        List<CustomDropEntry> customDrops = definition.getCustomDrops();
+        for (int index = 0; index < customDrops.size(); index++) {
+            CustomDropEntry entry = customDrops.get(index);
+            if (!matchesFilter(customDropSearchText(entry, index), normalizedFilter)) {
+                continue;
             }
-
-            inventory.setItem(slot, item);
-            menu.entryBySlot.put(slot, i);
+            entries.add(EntryBrowserRequest.Entry.of(String.valueOf(index), customDropIcon(definition, entry, index)));
         }
+        EntryBrowserMenus.open(player, EntryBrowserRequest.builder()
+            .title(TITLE_CUSTOM)
+            .entries(entries)
+            .page(page)
+            .filter(normalizedFilter)
+            .buttons(buttons)
+            .showBack(true)
+            .context(new CustomBrowserContext(dropId))
+            .addButton(createItem(Material.ANVIL, "{theme}Add Custom Drop", "{white}Choose item reward or", "{white}command reward.", "{white}Limit: {theme}" + customDrops.size() + "/" + plugin.getMaxCustomDropsPerProfile()))
+            .build());
+    }
 
-        fillEmptyDropSlots(inventory, visibleIndex);
-        inventory.setItem(GuiSlots.bottomMiddleSlot(6), buttons.back());
-        inventory.setItem(47, createItem(
-            Material.ANVIL,
-            "{theme}Add Custom Drop",
-            "{white}Choose item reward or",
-            "{white}command reward.",
-            "{white}Limit: {theme}" + entries.size() + "/" + plugin.getMaxCustomDropsPerProfile()
-        ));
+    private String customDropSearchText(CustomDropEntry entry, int index) {
+        return (entry.isItemReward() ? "item " + entry.getItem().getType().name() : "command") + " " + (index + 1);
+    }
 
-        if (finalPage > 0) {
-            inventory.setItem(45, buttons.previousPage(finalPage, totalPages - 1));
+    private ItemStack customDropIcon(DropDefinition definition, CustomDropEntry entry, int index) {
+        double expectedValue = (entry.getChance() / 100.0D) * ((entry.getMinAmount() + entry.getMaxAmount()) / 2.0D);
+        String gateLine = definition.getConditions().hasAnyRestrictions() ? "{muted}Profile gate: context-dependent" : "{good}Profile gate: always active";
+        ItemStack item = entry.isItemReward() ? entry.getItem() : new ItemStack(Material.COMMAND_BLOCK);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(plugin.messages().renderTemplate(entry.isItemReward() ? "{theme}Drop #" + (index + 1) : "{theme}Command Reward #" + (index + 1)));
+            List<String> lore = new ArrayList<>();
+            lore.add(plugin.messages().renderTemplate("{white}Type: " + (entry.isItemReward() ? "{theme}Item" : "{theme}Command")));
+            lore.add(plugin.messages().renderTemplate("{white}Chance: {theme}" + trimChance(entry.getChance()) + "%"));
+            if (entry.isItemReward()) {
+                lore.add(plugin.messages().renderTemplate("{white}Amount: {theme}" + entry.getMinAmount() + " - " + entry.getMaxAmount()));
+                lore.add(plugin.messages().renderTemplate("{white}Fortune: " + (entry.isRespectFortune() ? "{good}Enabled" : "{bad}Disabled")));
+                lore.add(plugin.messages().renderTemplate("{white}Delivery: " + formatDeliveryMode(entry.getDeliveryMode())));
+                lore.add(plugin.messages().renderTemplate("{white}Expected/Trigger: {theme}" + formatDecimal(expectedValue)));
+            }
+            lore.add(plugin.messages().renderTemplate("{white}Message: " + (entry.isSendMessage() ? "{good}Enabled" : "{bad}Disabled")));
+            addCommandRewardLore(lore, entry.getCommands());
+            lore.add(plugin.messages().renderTemplate(gateLine));
+            lore.add(plugin.messages().renderTemplate(""));
+            lore.add(plugin.messages().renderTemplate("{white}Click to edit this entry."));
+            meta.setLore(lore);
+            item.setItemMeta(meta);
         }
-        if (finalPage < totalPages - 1) {
-            inventory.setItem(53, buttons.nextPage(finalPage, totalPages - 1));
-        }
-
-        fillBackground(inventory);
-        player.openInventory(inventory);
+        return item;
     }
 
     public void openCustomDropEntryMenu(Player player, String dropId, int entryIndex, int returnPage) {
@@ -837,52 +826,45 @@ public class EditorManager implements Listener {
             return;
         }
 
-        CustomDropEntry entry = definition.getCustomDrops().get(entryIndex);
-        List<DropCommandAction> commands = entry.getCommands();
-        int totalPages = Math.max(1, (int) Math.ceil(commands.size() / (double) GRID_SLOTS.length));
-        int finalPage = Math.max(0, Math.min(page, totalPages - 1));
-        int start = finalPage * GRID_SLOTS.length;
+        openCommandMenu(player, dropId, entryIndex, "", page, returnPage);
+    }
 
-        EditorMenu menu = new EditorMenu(MenuType.COMMANDS, dropId, finalPage, entryIndex, returnPage);
-        Inventory inventory = Bukkit.createInventory(menu, 54, getGuiTitle(TITLE_COMMANDS));
-        menu.setInventory(inventory);
-
-        int visibleIndex = 0;
-        for (int i = start; i < commands.size() && visibleIndex < GRID_SLOTS.length; i++) {
-            int slot = GRID_SLOTS[visibleIndex++];
-            DropCommandAction action = commands.get(i);
-            inventory.setItem(slot, createItem(
+    private void openCommandMenu(Player player, String dropId, int entryIndex, String filter, int page, int returnPage) {
+        DropDefinition definition = dropStore.getDrop(dropId);
+        if (definition == null || entryIndex < 0 || entryIndex >= definition.getCustomDrops().size()) {
+            plugin.messages().sendConfigured(player, "custom-drop-missing");
+            openCustomDropsMenu(player, dropId, returnPage);
+            return;
+        }
+        String normalizedFilter = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
+        List<DropCommandAction> commands = definition.getCustomDrops().get(entryIndex).getCommands();
+        List<EntryBrowserRequest.Entry> entries = new ArrayList<>();
+        for (int index = 0; index < commands.size(); index++) {
+            DropCommandAction action = commands.get(index);
+            if (!matchesFilter(action.getCommand() + " " + action.getSenderType().getDisplayName(), normalizedFilter)) {
+                continue;
+            }
+            entries.add(EntryBrowserRequest.Entry.of(String.valueOf(index), createItem(
                 action.getSenderType() == DropCommandSenderType.CONSOLE ? Material.COMMAND_BLOCK : Material.PAPER,
-                "{theme}Command #" + (i + 1),
+                "{theme}Command #" + (index + 1),
                 "{white}Sender: {theme}" + action.getSenderType().getDisplayName(),
                 "{white}Command: {theme}" + action.getCommand(),
                 "",
                 "{white}Left-click: edit command text",
                 "{white}Right-click: toggle sender",
                 "{white}Shift-right: remove"
-            ));
-            menu.commandBySlot.put(slot, i);
+            )));
         }
-
-        fillEmptyDropSlots(inventory, visibleIndex);
-        inventory.setItem(GuiSlots.bottomMiddleSlot(6), buttons.back());
-        inventory.setItem(47, createItem(
-            Material.ANVIL,
-            "{theme}Add Command",
-            "{white}Format in chat:",
-            "{theme}<console|player> <command>",
-            "{white}Limit: {theme}" + commands.size() + "/" + plugin.getMaxCommandsPerEntry()
-        ));
-
-        if (finalPage > 0) {
-            inventory.setItem(45, buttons.previousPage(finalPage, totalPages - 1));
-        }
-        if (finalPage < totalPages - 1) {
-            inventory.setItem(53, buttons.nextPage(finalPage, totalPages - 1));
-        }
-
-        fillBackground(inventory);
-        player.openInventory(inventory);
+        EntryBrowserMenus.open(player, EntryBrowserRequest.builder()
+            .title(TITLE_COMMANDS)
+            .entries(entries)
+            .page(page)
+            .filter(normalizedFilter)
+            .buttons(buttons)
+            .showBack(true)
+            .context(new CommandBrowserContext(dropId, entryIndex, returnPage))
+            .addButton(createItem(Material.ANVIL, "{theme}Add Command", "{white}Format in chat:", "{theme}<console|player> <command>", "{white}Limit: {theme}" + commands.size() + "/" + plugin.getMaxCommandsPerEntry()))
+            .build());
     }
 
     @EventHandler
@@ -897,6 +879,16 @@ public class EditorManager implements Listener {
         }
         if (holder instanceof TriStateSelectionHolder selectionHolder) {
             handleWorldSelectorInventoryClick(event, player, selectionHolder);
+            return;
+        }
+        if (holder instanceof EntryBrowserHolder entryBrowserHolder) {
+            event.setCancelled(true);
+            if (!player.hasPermission("fodrops.admin")) {
+                player.closeInventory();
+                plugin.messages().sendConfigured(player, "no-permission");
+                return;
+            }
+            handleEntryBrowserClick(event, player, entryBrowserHolder);
             return;
         }
         if (holder instanceof EditorMenuHolder editorMenuHolder) {
@@ -975,6 +967,7 @@ public class EditorManager implements Listener {
     public void onEditorDrag(InventoryDragEvent event) {
         InventoryHolder holder = event.getView().getTopInventory().getHolder();
         if (!(holder instanceof EditorMenu)
+            && !(holder instanceof EntryBrowserHolder)
             && !(holder instanceof MobChooserHolder)
             && !(holder instanceof TriStateSelectionHolder)
             && !(holder instanceof EditorMenuHolder)) {
@@ -986,6 +979,116 @@ public class EditorManager implements Listener {
                 event.setCancelled(true);
                 return;
             }
+        }
+    }
+
+    private void handleEntryBrowserClick(InventoryClickEvent event, Player player, EntryBrowserHolder holder) {
+        Object context = holder.request().context();
+        EntryBrowserClick click = EntryBrowserMenus.handleClick(event.getRawSlot(), holder, event.getClick());
+        if (context == null) {
+            return;
+        }
+        switch (click.action()) {
+            case ENTRY -> {
+                if (context instanceof MainBrowserContext) {
+                    openDropMenu(player, click.entryId());
+                } else if (context instanceof CustomBrowserContext custom) {
+                    openCustomDropEntryMenu(player, custom.dropId(), parseBrowserIndex(click.entryId()), holder.request().page());
+                } else if (context instanceof CommandBrowserContext commands) {
+                    handleCommandBrowserEntry(player, commands, holder, click);
+                }
+            }
+            case ADD -> {
+                if (context instanceof MainBrowserContext) {
+                    startPrompt(player, PromptType.ADD_DROP, "", -1, holder.request().page(), -1, holder.request().page());
+                } else if (context instanceof CustomBrowserContext custom) {
+                    openAddCustomDropMenu(player, custom.dropId(), holder.request().page());
+                } else if (context instanceof CommandBrowserContext commands) {
+                    startPrompt(player, PromptType.COMMAND_ADD, commands.dropId(), commands.entryIndex(), holder.request().page(), -1, commands.returnPage());
+                }
+            }
+            case BACK -> {
+                if (context instanceof MainBrowserContext) {
+                    openEditorMenu(player);
+                } else if (context instanceof CustomBrowserContext custom) {
+                    openDropMenu(player, custom.dropId());
+                } else if (context instanceof CommandBrowserContext commands) {
+                    openCustomDropEntryMenu(player, commands.dropId(), commands.entryIndex(), commands.returnPage());
+                }
+            }
+            case SEARCH -> startEntryBrowserSearch(player, holder);
+            case CLEAR_SEARCH -> reopenEntryBrowser(player, context, "", 0, holder.request().page());
+            case PREVIOUS_PAGE -> reopenEntryBrowser(player, context, holder.request().filter(), holder.request().page() - 1, holder.request().page());
+            case NEXT_PAGE -> reopenEntryBrowser(player, context, holder.request().filter(), holder.request().page() + 1, holder.request().page());
+            case EXTRA, NONE -> {
+            }
+        }
+    }
+
+    private void handleCommandBrowserEntry(Player player, CommandBrowserContext context, EntryBrowserHolder holder, EntryBrowserClick click) {
+        int commandIndex = parseBrowserIndex(click.entryId());
+        DropDefinition definition = dropStore.getDrop(context.dropId());
+        if (definition == null || context.entryIndex() < 0 || context.entryIndex() >= definition.getCustomDrops().size()) {
+            openCustomDropsMenu(player, context.dropId(), context.returnPage());
+            return;
+        }
+        List<DropCommandAction> commands = definition.getCustomDrops().get(context.entryIndex()).getCommands();
+        if (commandIndex < 0 || commandIndex >= commands.size()) {
+            openCommandMenu(player, context.dropId(), context.entryIndex(), holder.request().page(), context.returnPage());
+            return;
+        }
+        DropCommandAction action = commands.get(commandIndex);
+        if (click.clickType() == ClickType.SHIFT_RIGHT) {
+            if (!definition.getCustomDrops().get(context.entryIndex()).isItemReward() && commands.size() <= 1) {
+                plugin.messages().sendConfigured(player, "custom-drop-command-required");
+                return;
+            }
+            commands.remove(commandIndex);
+            dropStore.save();
+            plugin.messages().sendConfigured(player, "command-removed");
+            reopenEntryBrowser(player, context, holder.request().filter(), holder.request().page(), context.returnPage());
+            return;
+        }
+        if (click.clickType() == ClickType.RIGHT) {
+            action.setSenderType(action.getSenderType().next());
+            dropStore.save();
+            plugin.messages().sendConfigured(player, "command-sender-updated", "{sender}", action.getSenderType().getDisplayName());
+            reopenEntryBrowser(player, context, holder.request().filter(), holder.request().page(), context.returnPage());
+            return;
+        }
+        startPrompt(player, PromptType.COMMAND_EDIT, context.dropId(), context.entryIndex(), holder.request().page(), commandIndex, context.returnPage());
+    }
+
+    private int parseBrowserIndex(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
+    }
+
+    private void reopenEntryBrowser(Player player, Object context, String filter, int page, int fallbackPage) {
+        if (context instanceof MainBrowserContext) {
+            openMainMenu(player, filter, page, dropStore.getAllDrops());
+        } else if (context instanceof CustomBrowserContext custom) {
+            openCustomDropsMenu(player, custom.dropId(), filter, page);
+        } else if (context instanceof CommandBrowserContext commands) {
+            openCommandMenu(player, commands.dropId(), commands.entryIndex(), filter, page, commands.returnPage());
+        } else {
+            openMainMenu(player, fallbackPage);
+        }
+    }
+
+    private void startEntryBrowserSearch(Player player, EntryBrowserHolder holder) {
+        Object context = holder.request().context();
+        PromptType type = context instanceof MainBrowserContext ? PromptType.MAIN_SEARCH
+            : context instanceof CustomBrowserContext ? PromptType.CUSTOM_SEARCH : PromptType.COMMAND_SEARCH;
+        if (context instanceof MainBrowserContext) {
+            openInputPrompt(player, new ChatPrompt(type, "", -1, holder.request().page(), -1, holder.request().page(), holder.request().filter(), false));
+        } else if (context instanceof CustomBrowserContext custom) {
+            openInputPrompt(player, new ChatPrompt(type, custom.dropId(), -1, holder.request().page(), -1, holder.request().page(), holder.request().filter(), false));
+        } else if (context instanceof CommandBrowserContext commands) {
+            openInputPrompt(player, new ChatPrompt(type, commands.dropId(), commands.entryIndex(), holder.request().page(), -1, commands.returnPage(), holder.request().filter(), false));
         }
     }
 
@@ -1662,6 +1765,18 @@ public class EditorManager implements Listener {
             handleAddDropPromptInput(player, prompt, input);
             return;
         }
+        if (prompt.type == PromptType.MAIN_SEARCH || prompt.type == PromptType.CUSTOM_SEARCH || prompt.type == PromptType.COMMAND_SEARCH) {
+            chatPrompts.remove(player.getUniqueId());
+            String filter = input.equalsIgnoreCase("none") ? "" : input.trim();
+            if (prompt.type == PromptType.MAIN_SEARCH) {
+                reopenEntryBrowser(player, new MainBrowserContext(), filter, 0, prompt.page);
+            } else if (prompt.type == PromptType.CUSTOM_SEARCH) {
+                reopenEntryBrowser(player, new CustomBrowserContext(prompt.dropId), filter, 0, prompt.returnPage);
+            } else {
+                reopenEntryBrowser(player, new CommandBrowserContext(prompt.dropId, prompt.entryIndex, prompt.returnPage), filter, 0, prompt.returnPage);
+            }
+            return;
+        }
 
         DropDefinition definition = dropStore.getDrop(prompt.dropId);
         if (definition == null) {
@@ -1681,6 +1796,8 @@ public class EditorManager implements Listener {
                 chatPrompts.remove(player.getUniqueId());
                 String filter = input.equalsIgnoreCase("none") ? "" : input;
                 openWorldSelector(player, definition.getId(), 0, filter);
+            }
+            case MAIN_SEARCH, CUSTOM_SEARCH, COMMAND_SEARCH -> {
             }
             case RENAME -> {
                 if (input.isBlank()) {
@@ -1988,6 +2105,9 @@ public class EditorManager implements Listener {
     private void reopenAfterPrompt(Player player, ChatPrompt prompt) {
         switch (prompt.type) {
             case ADD_DROP -> openMainMenu(player, prompt.page);
+            case MAIN_SEARCH -> reopenEntryBrowser(player, new MainBrowserContext(), prompt.filter, prompt.page, prompt.page);
+            case CUSTOM_SEARCH -> reopenEntryBrowser(player, new CustomBrowserContext(prompt.dropId), prompt.filter, prompt.page, prompt.returnPage);
+            case COMMAND_SEARCH -> reopenEntryBrowser(player, new CommandBrowserContext(prompt.dropId, prompt.entryIndex, prompt.returnPage), prompt.filter, prompt.page, prompt.returnPage);
             case RENAME, PRIORITY -> openDropMenu(player, prompt.dropId);
             case CHANCE, AMOUNT -> openCustomDropEntryMenu(player, prompt.dropId, prompt.entryIndex, prompt.returnPage);
             case CONDITION_TARGETS -> openDropMenu(player, prompt.dropId);
@@ -2113,6 +2233,7 @@ public class EditorManager implements Listener {
         return switch (type) {
             case MOB_TARGET_SEARCH -> "prompt-mob-search";
             case WORLD_SEARCH -> "prompt-world-search";
+            case MAIN_SEARCH, CUSTOM_SEARCH, COMMAND_SEARCH -> "prompt-entry-search";
             case ADD_DROP -> "prompt-add-drop";
             case RENAME -> "prompt-rename";
             case PRIORITY -> "prompt-priority";
@@ -2142,7 +2263,9 @@ public class EditorManager implements Listener {
         CustomDropEntry entry = promptEntryOrNull(definition, prompt);
 
         return new TextDialogRequest(
-            prompt.type == PromptType.MOB_TARGET_SEARCH || prompt.type == PromptType.WORLD_SEARCH ? "Search" : promptTitle(prompt.type),
+            prompt.type == PromptType.MOB_TARGET_SEARCH || prompt.type == PromptType.WORLD_SEARCH
+                || prompt.type == PromptType.MAIN_SEARCH || prompt.type == PromptType.CUSTOM_SEARCH || prompt.type == PromptType.COMMAND_SEARCH
+                ? "Search" : promptTitle(prompt.type),
             List.of(renderPromptText(promptBody(prompt.type), prompt)),
             promptFieldLabel(prompt.type),
             currentPromptValue(definition, entry, prompt),
@@ -2169,13 +2292,14 @@ public class EditorManager implements Listener {
 
     private DialogButton submitButton(PromptType type) {
         return switch (type) {
-            case MOB_TARGET_SEARCH, WORLD_SEARCH -> DialogButton.search("Search", "", 100);
+            case MOB_TARGET_SEARCH, WORLD_SEARCH, MAIN_SEARCH, CUSTOM_SEARCH, COMMAND_SEARCH -> DialogButton.search("Search", "", 100);
             default -> DialogButton.save("Save", "", 100);
         };
     }
 
     private DialogButton cancelButton(PromptType type) {
         return type == PromptType.MOB_TARGET_SEARCH || type == PromptType.WORLD_SEARCH
+            || type == PromptType.MAIN_SEARCH || type == PromptType.CUSTOM_SEARCH || type == PromptType.COMMAND_SEARCH
             ? DialogButton.cancel("Back", "", 100)
             : DialogButton.cancel("Cancel", "", 100);
     }
@@ -2184,6 +2308,7 @@ public class EditorManager implements Listener {
         return switch (type) {
             case MOB_TARGET_SEARCH -> "zombie";
             case WORLD_SEARCH -> "world";
+            case MAIN_SEARCH, CUSTOM_SEARCH, COMMAND_SEARCH -> "diamond";
             case ADD_DROP -> "Bonus Diamonds";
             case RENAME -> "Bonus Diamonds";
             case PRIORITY -> "0";
@@ -2209,7 +2334,7 @@ public class EditorManager implements Listener {
 
     private int inputWidth(PromptType type) {
         return switch (type) {
-            case MOB_TARGET_SEARCH, WORLD_SEARCH -> 280;
+            case MOB_TARGET_SEARCH, WORLD_SEARCH, MAIN_SEARCH, CUSTOM_SEARCH, COMMAND_SEARCH -> 280;
             case PRIORITY, CHANCE, AMOUNT, CONDITION_FORTUNE, CONDITION_TIME, CONDITION_COOLDOWN,
                 CONFIG_MAX_PROFILES, CONFIG_MAX_CUSTOM_DROPS, CONFIG_MAX_COMMANDS, CONFIG_MAX_DROP_AMOUNT -> 220;
             case COMMAND_DROP_ADD, COMMAND_ADD, COMMAND_EDIT -> 360;
@@ -2226,7 +2351,7 @@ public class EditorManager implements Listener {
 
     private int maxLength(PromptType type) {
         return switch (type) {
-            case MOB_TARGET_SEARCH, WORLD_SEARCH -> 80;
+            case MOB_TARGET_SEARCH, WORLD_SEARCH, MAIN_SEARCH, CUSTOM_SEARCH, COMMAND_SEARCH -> 80;
             case PRIORITY, CHANCE, AMOUNT, CONDITION_FORTUNE, CONDITION_TIME, CONDITION_COOLDOWN,
                 CONFIG_MAX_PROFILES, CONFIG_MAX_CUSTOM_DROPS, CONFIG_MAX_COMMANDS, CONFIG_MAX_DROP_AMOUNT -> 64;
             default -> 256;
@@ -2237,6 +2362,7 @@ public class EditorManager implements Listener {
         return switch (type) {
             case MOB_TARGET_SEARCH -> "Search Mob Targets";
             case WORLD_SEARCH -> "Search Worlds";
+            case MAIN_SEARCH, CUSTOM_SEARCH, COMMAND_SEARCH -> "Search Entries";
             case ADD_DROP -> "Name Drop";
             case RENAME -> "Rename Drop";
             case PRIORITY -> "Set Priority";
@@ -2265,6 +2391,7 @@ public class EditorManager implements Listener {
         return switch (type) {
             case MOB_TARGET_SEARCH -> "Enter a mob search term. Leave empty to show all mobs.";
             case WORLD_SEARCH -> "Enter a world search term. Leave empty to show all worlds.";
+            case MAIN_SEARCH, CUSTOM_SEARCH, COMMAND_SEARCH -> "Enter an entry search term. Leave empty to show all entries.";
             case ADD_DROP -> "Enter the initial drop profile name.";
             case RENAME -> "Enter the profile display name.";
             case PRIORITY -> "Enter priority as an integer.";
@@ -2288,7 +2415,7 @@ public class EditorManager implements Listener {
 
     private String promptFieldLabel(PromptType type) {
         return switch (type) {
-            case MOB_TARGET_SEARCH, WORLD_SEARCH -> "Search";
+            case MOB_TARGET_SEARCH, WORLD_SEARCH, MAIN_SEARCH, CUSTOM_SEARCH, COMMAND_SEARCH -> "Search";
             case ADD_DROP, RENAME -> "Name";
             case PRIORITY -> "Priority";
             case CHANCE -> "Chance";
@@ -2323,6 +2450,7 @@ public class EditorManager implements Listener {
         return switch (prompt.type) {
             case MOB_TARGET_SEARCH -> prompt.filter;
             case WORLD_SEARCH -> prompt.filter;
+            case MAIN_SEARCH, CUSTOM_SEARCH, COMMAND_SEARCH -> prompt.filter;
             case ADD_DROP -> "";
             case RENAME -> definition.getName();
             case PRIORITY -> String.valueOf(definition.getPriority());
@@ -2680,6 +2808,9 @@ public class EditorManager implements Listener {
     private enum PromptType {
         MOB_TARGET_SEARCH,
         WORLD_SEARCH,
+        MAIN_SEARCH,
+        CUSTOM_SEARCH,
+        COMMAND_SEARCH,
         ADD_DROP,
         RENAME,
         PRIORITY,
@@ -2734,6 +2865,15 @@ public class EditorManager implements Listener {
         private ChatPrompt withNativeDialog(boolean nativeDialog) {
             return new ChatPrompt(type, dropId, entryIndex, page, commandIndex, returnPage, filter, nativeDialog);
         }
+    }
+
+    private record MainBrowserContext() {
+    }
+
+    private record CustomBrowserContext(String dropId) {
+    }
+
+    private record CommandBrowserContext(String dropId, int entryIndex, int returnPage) {
     }
 
     private static final class EditorMenu implements InventoryHolder {
