@@ -7,6 +7,7 @@ import me.foesio.core.inventory.InventoryDepositResultMode;
 import me.foesio.core.inventory.InventoryDepositService;
 import me.foesio.core.inventory.OverflowPolicy;
 import me.foesio.core.item.FoItemStacks;
+import me.foesio.core.sound.FoSoundService;
 import me.foesio.foDrops.FoDrops;
 import me.foesio.foDrops.api.FoDropRewardEvent;
 import org.bukkit.Bukkit;
@@ -29,18 +30,22 @@ import java.util.UUID;
 public class DropEngine {
     private static final long COOLDOWN_CLEANUP_INTERVAL_MS = 300_000L;
     private static final long COOLDOWN_STALE_TTL_MS = 86_400_000L;
+    private static final long REWARD_SOUND_COOLDOWN_MS = 150L;
 
     private final FoDrops plugin;
     private final DropStore dropStore;
     private final InventoryDepositService inventoryDeposits;
+    private final FoSoundService sounds;
     private final Random random = new Random();
     private final Map<UUID, Map<String, Long>> cooldownByPlayerAndProfile = new HashMap<>();
+    private final Map<UUID, Long> rewardSoundByPlayer = new HashMap<>();
     private long nextCooldownCleanupAt = 0L;
 
-    public DropEngine(FoDrops plugin, DropStore dropStore, InventoryDepositService inventoryDeposits) {
+    public DropEngine(FoDrops plugin, DropStore dropStore, InventoryDepositService inventoryDeposits, FoSoundService sounds) {
         this.plugin = plugin;
         this.dropStore = dropStore;
         this.inventoryDeposits = inventoryDeposits == null ? InventoryDepositService.create() : inventoryDeposits;
+        this.sounds = sounds;
     }
 
     public DropEvaluation evaluate(DropContext context) {
@@ -73,6 +78,9 @@ public class DropEngine {
             return;
         }
 
+        boolean deliveredAny = false;
+        boolean rewardedAny = false;
+        boolean attemptedItemDelivery = false;
         for (DropDefinition definition : evaluation.getMatchedDefinitions()) {
             for (CustomDropEntry entry : definition.getCustomDrops()) {
                 if (!entry.shouldDrop(random)) {
@@ -83,15 +91,29 @@ public class DropEngine {
                     ItemStack marker = entry.getItem();
                     runCommands(entry, context, marker);
                     sendRewardMessage(entry, context, definition, marker);
+                    rewardedAny = true;
                     continue;
                 }
 
+                attemptedItemDelivery = true;
                 ItemStack built = entry.createDropItem(random, context.getFortuneLevel(), plugin.getMaxDropAmount());
                 if (deliverItem(entry.getDeliveryMode(), built, context, definition, groundTarget, world, location)) {
+                    deliveredAny = true;
+                    rewardedAny = true;
                     runCommands(entry, context, built);
                     sendRewardMessage(entry, context, definition, built);
                 }
             }
+        }
+        if (attemptedItemDelivery && !deliveredAny && !rewardedAny) {
+            if (context.getPlayer() != null) {
+                sounds.play(context.getPlayer(), "drop.error");
+            } else {
+                sounds.play(location, "drop.error");
+            }
+        }
+        if (rewardedAny) {
+            playRewardSound(context.getPlayer(), location);
         }
     }
 
@@ -233,6 +255,22 @@ public class DropEngine {
                 playerIterator.remove();
             }
         }
+        rewardSoundByPlayer.entrySet().removeIf(entry -> now - entry.getValue() > COOLDOWN_STALE_TTL_MS);
+    }
+
+    private void playRewardSound(Player player, Location location) {
+        if (player == null) {
+            sounds.play(location, "drop.reward");
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        Long lastPlayedAt = rewardSoundByPlayer.get(player.getUniqueId());
+        if (lastPlayedAt != null && now - lastPlayedAt < REWARD_SOUND_COOLDOWN_MS) {
+            return;
+        }
+        rewardSoundByPlayer.put(player.getUniqueId(), now);
+        sounds.playWithPitchVariation(player, "drop.reward", 0.08f);
     }
 
     private DropWeather currentWeather(World world) {

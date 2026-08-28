@@ -1,6 +1,7 @@
 package me.foesio.foDrops.command;
 
 import me.foesio.core.reload.FoReloadResult;
+import me.foesio.core.sound.FoAdminSounds;
 import me.foesio.core.update.UpdateNoticeService;
 import me.foesio.foDrops.FoDrops;
 import me.foesio.foDrops.drop.DropStore;
@@ -19,18 +20,21 @@ public class FoDropsCommand implements CommandExecutor, TabCompleter {
     private final DropStore dropStore;
     private final EditorManager editorManager;
     private final UpdateNoticeService updateNotices;
+    private final FoAdminSounds adminSounds;
 
-    public FoDropsCommand(FoDrops plugin, DropStore dropStore, EditorManager editorManager, UpdateNoticeService updateNotices) {
+    public FoDropsCommand(FoDrops plugin, DropStore dropStore, EditorManager editorManager, UpdateNoticeService updateNotices, FoAdminSounds adminSounds) {
         this.plugin = plugin;
         this.dropStore = dropStore;
         this.editorManager = editorManager;
         this.updateNotices = updateNotices;
+        this.adminSounds = adminSounds;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("fodrops.admin")) {
             plugin.messages().sendConfigured(sender, "no-permission");
+            adminSounds.updateError(sender);
             return true;
         }
 
@@ -56,7 +60,7 @@ public class FoDropsCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
 
-            editorManager.openEditorMenu(player);
+            editorManager.openEditorFromCommand(player);
             return true;
         }
 
@@ -65,13 +69,20 @@ public class FoDropsCommand implements CommandExecutor, TabCompleter {
             if (!result.successful()) {
                 plugin.getLogger().warning("Reload failed at " + result.failedStep() + ": " + result.errorMessage());
                 plugin.messages().sendConfigured(sender, "reload-failed", "{step}", result.failedStep(), "{error}", result.errorMessage());
+                if (sender instanceof Player player) {
+                    adminSounds.reloadError(player);
+                }
                 return true;
             }
             plugin.messages().sendConfigured(sender, "reloaded", "{count}", String.valueOf(dropStore.getAllDrops().size()));
+            if (sender instanceof Player player) {
+                adminSounds.reload(player);
+            }
             return true;
         }
 
         plugin.messages().sendConfigured(sender, "unknown-subcommand", "{arg}", args[0]);
+        adminSounds.updateError(sender);
         return true;
     }
 

@@ -37,6 +37,7 @@ import me.foesio.core.selector.TriStateSelectionRequest;
 import me.foesio.core.selector.TriStateSelectionState;
 import me.foesio.core.selector.TriStateSelections;
 import me.foesio.core.selector.WorldSelectionEntries;
+import me.foesio.core.sound.FoEditorSounds;
 import me.foesio.foDrops.FoDrops;
 import me.foesio.foDrops.drop.CustomDropEntry;
 import me.foesio.foDrops.drop.DropCommandAction;
@@ -110,16 +111,18 @@ public class EditorManager implements Listener {
     private final FoDrops plugin;
     private final DropStore dropStore;
     private final FoCoreContext core;
+    private final FoEditorSounds editorSounds;
     private final GuiButtonConfig buttons = GuiButtonConfig.defaults();
     private final Map<UUID, ChatPrompt> chatPrompts = new ConcurrentHashMap<>();
     private final Map<UUID, String> mobTargetDropIds = new ConcurrentHashMap<>();
     private final Map<UUID, String> worldSelectionDropIds = new ConcurrentHashMap<>();
     private final Set<UUID> warnedFallbackPlayers = ConcurrentHashMap.newKeySet();
 
-    public EditorManager(FoDrops plugin, DropStore dropStore, FoCoreContext core) {
+    public EditorManager(FoDrops plugin, DropStore dropStore, FoCoreContext core, FoEditorSounds editorSounds) {
         this.plugin = plugin;
         this.dropStore = dropStore;
         this.core = core;
+        this.editorSounds = editorSounds;
     }
 
     public void reloadDialogInputs() {
@@ -135,6 +138,11 @@ public class EditorManager implements Listener {
 
     public void openEditorMenu(Player player) {
         settingsEditor().open(player);
+    }
+
+    public void openEditorFromCommand(Player player) {
+        editorSounds.open(player);
+        openEditorMenu(player);
     }
 
     private ConfigEditorMenu settingsEditor() {
@@ -421,11 +429,6 @@ public class EditorManager implements Listener {
             "{white}ID: {theme}" + definition.getId(),
             "",
             "{bad}This cannot be undone."
-        ));
-        inventory.setItem(15, createItem(
-            Material.BARRIER,
-            "{good}Cancel",
-            "{white}Return to the profile editor."
         ));
         inventory.setItem(GuiSlots.bottomMiddleSlot(3), buttons.back());
 
@@ -802,11 +805,6 @@ public class EditorManager implements Listener {
             "",
             "{bad}This cannot be undone."
         ));
-        inventory.setItem(15, createItem(
-            Material.BARRIER,
-            "{good}Cancel",
-            "{white}Return to the entry editor."
-        ));
         inventory.setItem(GuiSlots.bottomMiddleSlot(3), buttons.back());
 
         fillBackground(inventory);
@@ -985,14 +983,17 @@ public class EditorManager implements Listener {
     private void handleEntryBrowserClick(InventoryClickEvent event, Player player, EntryBrowserHolder holder) {
         Object context = holder.request().context();
         EntryBrowserClick click = EntryBrowserMenus.handleClick(event.getRawSlot(), holder, event.getClick());
+        playBrowserSound(player, click);
         if (context == null) {
             return;
         }
         switch (click.action()) {
             case ENTRY -> {
                 if (context instanceof MainBrowserContext) {
+                    editorSounds.open(player);
                     openDropMenu(player, click.entryId());
                 } else if (context instanceof CustomBrowserContext custom) {
+                    editorSounds.open(player);
                     openCustomDropEntryMenu(player, custom.dropId(), parseBrowserIndex(click.entryId()), holder.request().page());
                 } else if (context instanceof CommandBrowserContext commands) {
                     handleCommandBrowserEntry(player, commands, holder, click);
@@ -1002,6 +1003,7 @@ public class EditorManager implements Listener {
                 if (context instanceof MainBrowserContext) {
                     startPrompt(player, PromptType.ADD_DROP, "", -1, holder.request().page(), -1, holder.request().page());
                 } else if (context instanceof CustomBrowserContext custom) {
+                    editorSounds.open(player);
                     openAddCustomDropMenu(player, custom.dropId(), holder.request().page());
                 } else if (context instanceof CommandBrowserContext commands) {
                     startPrompt(player, PromptType.COMMAND_ADD, commands.dropId(), commands.entryIndex(), holder.request().page(), -1, commands.returnPage());
@@ -1025,6 +1027,18 @@ public class EditorManager implements Listener {
         }
     }
 
+    private void playBrowserSound(Player player, EntryBrowserClick click) {
+        switch (click.action()) {
+            case BACK -> editorSounds.back(player);
+            case SEARCH -> editorSounds.search(player);
+            case CLEAR_SEARCH -> editorSounds.clearSearch(player);
+            case PREVIOUS_PAGE -> editorSounds.previousPage(player);
+            case NEXT_PAGE -> editorSounds.nextPage(player);
+            case ADD, EXTRA, NONE -> {
+            }
+        }
+    }
+
     private void handleCommandBrowserEntry(Player player, CommandBrowserContext context, EntryBrowserHolder holder, EntryBrowserClick click) {
         int commandIndex = parseBrowserIndex(click.entryId());
         DropDefinition definition = dropStore.getDrop(context.dropId());
@@ -1040,10 +1054,12 @@ public class EditorManager implements Listener {
         DropCommandAction action = commands.get(commandIndex);
         if (click.clickType() == ClickType.SHIFT_RIGHT) {
             if (!definition.getCustomDrops().get(context.entryIndex()).isItemReward() && commands.size() <= 1) {
+                editorSounds.error(player);
                 plugin.messages().sendConfigured(player, "custom-drop-command-required");
                 return;
             }
             commands.remove(commandIndex);
+            editorSounds.delete(player);
             dropStore.save();
             plugin.messages().sendConfigured(player, "command-removed");
             reopenEntryBrowser(player, context, holder.request().filter(), holder.request().page(), context.returnPage());
@@ -1051,6 +1067,7 @@ public class EditorManager implements Listener {
         }
         if (click.clickType() == ClickType.RIGHT) {
             action.setSenderType(action.getSenderType().next());
+            editorSounds.cycle(player);
             dropStore.save();
             plugin.messages().sendConfigured(player, "command-sender-updated", "{sender}", action.getSenderType().getDisplayName());
             reopenEntryBrowser(player, context, holder.request().filter(), holder.request().page(), context.returnPage());
@@ -1145,6 +1162,7 @@ public class EditorManager implements Listener {
         }
 
         if (button.id().equals("manage-drops")) {
+            editorSounds.open(player);
             openMainMenu(player, 0);
         }
     }
@@ -1159,6 +1177,7 @@ public class EditorManager implements Listener {
 
     private boolean sendSettingSaveResult(Player player, String setting, EditorSaveResult result) {
         if (!result.successful()) {
+            editorSounds.error(player);
             plugin.messages().sendConfigured(player, "editor-save-failed",
                 "{setting}", setting,
                 "{error}", result.errorMessage());
@@ -1166,22 +1185,26 @@ public class EditorManager implements Listener {
         }
 
         plugin.messages().sendConfigured(player, "editor-saved", "{setting}", setting);
+        editorSounds.save(player);
         return true;
     }
 
     private void handleMainClick(Player player, EditorMenu menu, int slot) {
         String dropId = menu.dropBySlot.get(slot);
         if (dropId != null) {
+            editorSounds.open(player);
             openDropMenu(player, dropId);
             return;
         }
 
         if (slot == 49) {
+            editorSounds.back(player);
             openEditorMenu(player);
             return;
         }
         if (slot == 47) {
             if (dropStore.getAllDrops().size() >= plugin.getMaxProfiles()) {
+                editorSounds.error(player);
                 plugin.messages().sendConfigured(player, "drop-limit-reached", "{max}", String.valueOf(plugin.getMaxProfiles()));
                 return;
             }
@@ -1190,10 +1213,12 @@ public class EditorManager implements Listener {
             return;
         }
         if (slot == 45) {
+            editorSounds.previousPage(player);
             openMainMenu(player, menu.page - 1);
             return;
         }
         if (slot == 53) {
+            editorSounds.nextPage(player);
             openMainMenu(player, menu.page + 1);
         }
     }
@@ -1212,6 +1237,7 @@ public class EditorManager implements Listener {
         }
         if (slot == 11) {
             definition.setEventType(definition.getEventType().next());
+            editorSounds.cycle(player);
             dropStore.save();
             plugin.messages().sendConfigured(player, "drop-event-updated", "{event}", definition.getEventType().getDisplayName());
             openDropMenu(player, definition.getId());
@@ -1219,6 +1245,7 @@ public class EditorManager implements Listener {
         }
         if (slot == 12) {
             if (definition.getEventType() == DropEventType.MOB_KILL) {
+                editorSounds.open(player);
                 openMobTargetSelector(player, definition.getId(), 0);
                 return;
             }
@@ -1227,6 +1254,7 @@ public class EditorManager implements Listener {
             return;
         }
         if (slot == 13) {
+            editorSounds.open(player);
             openConditionsMenu(player, definition.getId());
             return;
         }
@@ -1236,6 +1264,7 @@ public class EditorManager implements Listener {
         }
         if (slot == 15) {
             definition.setCancelVanillaDrops(!definition.isCancelVanillaDrops());
+            editorSounds.toggle(player, definition.isCancelVanillaDrops());
             dropStore.save();
             plugin.messages().sendConfigured(player, "drop-cancel-updated", "{state}", definition.isCancelVanillaDrops() ? "{good}Enabled" : "{bad}Disabled");
             openDropMenu(player, definition.getId());
@@ -1243,20 +1272,24 @@ public class EditorManager implements Listener {
         }
         if (slot == 16) {
             definition.setStopProcessing(!definition.isStopProcessing());
+            editorSounds.toggle(player, definition.isStopProcessing());
             dropStore.save();
             plugin.messages().sendConfigured(player, "drop-stop-updated", "{state}", definition.isStopProcessing() ? "{good}Enabled" : "{bad}Disabled");
             openDropMenu(player, definition.getId());
             return;
         }
         if (slot == 19) {
+            editorSounds.open(player);
             openCustomDropsMenu(player, definition.getId(), 0);
             return;
         }
         if (slot == 20) {
+            editorSounds.open(player);
             openDeleteConfirmMenu(player, definition.getId());
             return;
         }
         if (slot == GuiSlots.bottomMiddleSlot(4)) {
+            editorSounds.back(player);
             openMainMenu(player, 0);
         }
     }
@@ -1271,12 +1304,14 @@ public class EditorManager implements Listener {
 
         if (slot == 11) {
             dropStore.deleteDrop(definition.getId());
+            editorSounds.delete(player);
             plugin.messages().sendConfigured(player, "drop-deleted", "{id}", definition.getId());
             openMainMenu(player, 0);
             return;
         }
 
-        if (slot == 15 || slot == 22) {
+        if (slot == GuiSlots.bottomMiddleSlot(3)) {
+            editorSounds.back(player);
             openDropMenu(player, definition.getId());
         }
     }
@@ -1316,14 +1351,23 @@ public class EditorManager implements Listener {
         if (click.action() == MobChooserActionType.PREVIOUS_PAGE
             || click.action() == MobChooserActionType.NEXT_PAGE
             || click.action() == MobChooserActionType.CLEAR_SEARCH) {
+            if (click.action() == MobChooserActionType.PREVIOUS_PAGE) {
+                editorSounds.previousPage(player);
+            } else if (click.action() == MobChooserActionType.NEXT_PAGE) {
+                editorSounds.nextPage(player);
+            } else {
+                editorSounds.clearSearch(player);
+            }
             openMobTargetSelector(player, definition.getId(), click.nextRequest().page(), click.nextRequest().filter());
             return;
         }
         if (click.action() == MobChooserActionType.SEARCH) {
+            editorSounds.search(player);
             startMobTargetSearchPrompt(player, definition.getId(), holder.request().page(), holder.request().filter());
             return;
         }
         if (click.action() == MobChooserActionType.BACK) {
+            editorSounds.back(player);
             mobTargetDropIds.remove(player.getUniqueId());
             openDropMenu(player, definition.getId());
             return;
@@ -1333,6 +1377,7 @@ public class EditorManager implements Listener {
         }
 
         toggleMobTarget(definition, click.entityType());
+        editorSounds.cycle(player);
         plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "mob targets");
         dropStore.save();
         openMobTargetSelector(player, definition.getId(), click.page(), click.filter());
@@ -1373,14 +1418,23 @@ public class EditorManager implements Listener {
         if (click.action() == TriStateSelectionActionType.PREVIOUS_PAGE
             || click.action() == TriStateSelectionActionType.NEXT_PAGE
             || click.action() == TriStateSelectionActionType.CLEAR_SEARCH) {
+            if (click.action() == TriStateSelectionActionType.PREVIOUS_PAGE) {
+                editorSounds.previousPage(player);
+            } else if (click.action() == TriStateSelectionActionType.NEXT_PAGE) {
+                editorSounds.nextPage(player);
+            } else {
+                editorSounds.clearSearch(player);
+            }
             openWorldSelector(player, definition.getId(), click.nextRequest().page(), click.nextRequest().filter());
             return;
         }
         if (click.action() == TriStateSelectionActionType.SEARCH) {
+            editorSounds.search(player);
             startWorldSearchPrompt(player, definition.getId(), holder.request().page(), holder.request().filter());
             return;
         }
         if (click.action() == TriStateSelectionActionType.BACK) {
+            editorSounds.back(player);
             worldSelectionDropIds.remove(player.getUniqueId());
             openConditionsMenu(player, definition.getId());
             return;
@@ -1390,6 +1444,7 @@ public class EditorManager implements Listener {
         }
 
         saveWorldSelection(definition.getConditions(), click.nextRequest());
+        editorSounds.cycle(player);
         plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "worlds");
         dropStore.save();
         openWorldSelector(player, definition.getId(), click.page(), click.filter());
@@ -1441,6 +1496,7 @@ public class EditorManager implements Listener {
 
         DropConditions conditions = definition.getConditions();
         if (slot == 10) {
+            editorSounds.open(player);
             openWorldSelector(player, definition.getId(), 0);
             return;
         }
@@ -1458,6 +1514,7 @@ public class EditorManager implements Listener {
         }
         if (slot == 14) {
             conditions.setSilkTouchMode(conditions.getSilkTouchMode().next());
+            editorSounds.cycle(player);
             dropStore.save();
             plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "silk-touch");
             openConditionsMenu(player, definition.getId());
@@ -1480,6 +1537,7 @@ public class EditorManager implements Listener {
             return;
         }
         if (slot == GuiSlots.bottomMiddleSlot(4)) {
+            editorSounds.back(player);
             openDropMenu(player, definition.getId());
         }
     }
@@ -1499,24 +1557,29 @@ public class EditorManager implements Listener {
                 return;
             }
 
+            editorSounds.open(player);
             openCustomDropEntryMenu(player, definition.getId(), entryIndex, menu.page);
             return;
         }
 
         if (slot == 47) {
+            editorSounds.open(player);
             openAddCustomDropMenu(player, definition.getId(), menu.page);
             return;
         }
         if (slot == GuiSlots.bottomMiddleSlot(6)) {
+            editorSounds.back(player);
             openDropMenu(player, definition.getId());
             return;
         }
         int totalPages = Math.max(1, (int) Math.ceil(definition.getCustomDrops().size() / (double) GRID_SLOTS.length));
         if (slot == 45 && menu.page > 0) {
+            editorSounds.previousPage(player);
             openCustomDropsMenu(player, definition.getId(), menu.page - 1);
             return;
         }
         if (slot == 53 && menu.page < totalPages - 1) {
+            editorSounds.nextPage(player);
             openCustomDropsMenu(player, definition.getId(), menu.page + 1);
         }
     }
@@ -1536,6 +1599,7 @@ public class EditorManager implements Listener {
 
         CustomDropEntry entry = definition.getCustomDrops().get(menu.selectedIndex);
         if (slot == 10) {
+            editorSounds.open(player);
             openCommandMenu(player, definition.getId(), menu.selectedIndex, 0, menu.returnPage);
             return;
         }
@@ -1555,6 +1619,7 @@ public class EditorManager implements Listener {
                 return;
             }
             entry.setDeliveryMode(entry.getDeliveryMode().next());
+            editorSounds.cycle(player);
             dropStore.save();
             plugin.messages().sendConfigured(player, "custom-drop-delivery-updated",
                 "{mode}", entry.getDeliveryMode() == DropDeliveryMode.INVENTORY ? "{good}Inventory" : "{theme}Ground");
@@ -1563,6 +1628,7 @@ public class EditorManager implements Listener {
         }
         if (slot == 14) {
             entry.setSendMessage(!entry.isSendMessage());
+            editorSounds.toggle(player, entry.isSendMessage());
             dropStore.save();
             plugin.messages().sendConfigured(player, "custom-drop-message-updated", "{state}", entry.isSendMessage() ? "{good}Enabled" : "{bad}Disabled");
             openCustomDropEntryMenu(player, definition.getId(), menu.selectedIndex, menu.returnPage);
@@ -1574,6 +1640,7 @@ public class EditorManager implements Listener {
                 return;
             }
             entry.setRespectFortune(!entry.isRespectFortune());
+            editorSounds.toggle(player, entry.isRespectFortune());
             dropStore.save();
             plugin.messages().sendConfigured(player, "custom-drop-fortune-updated", "{state}", entry.isRespectFortune() ? "{good}Enabled" : "{bad}Disabled");
             openCustomDropEntryMenu(player, definition.getId(), menu.selectedIndex, menu.returnPage);
@@ -1581,20 +1648,24 @@ public class EditorManager implements Listener {
         }
         if (slot == 16) {
             if (entry.isItemReward() && entry.getCommands().isEmpty()) {
+                editorSounds.error(player);
                 plugin.messages().sendConfigured(player, "custom-drop-command-required");
                 return;
             }
             entry.setItemReward(!entry.isItemReward());
+            editorSounds.toggle(player, entry.isItemReward());
             dropStore.save();
             plugin.messages().sendConfigured(player, "custom-drop-type-updated", "{state}", entry.isItemReward() ? "{good}Enabled" : "{bad}Disabled");
             openCustomDropEntryMenu(player, definition.getId(), menu.selectedIndex, menu.returnPage);
             return;
         }
         if (slot == 22) {
+            editorSounds.open(player);
             openCustomDropDeleteConfirmMenu(player, definition.getId(), menu.selectedIndex, menu.returnPage);
             return;
         }
         if (slot == GuiSlots.bottomMiddleSlot(4)) {
+            editorSounds.back(player);
             openCustomDropsMenu(player, definition.getId(), menu.returnPage);
         }
     }
@@ -1614,12 +1685,14 @@ public class EditorManager implements Listener {
 
         if (slot == 11) {
             definition.getCustomDrops().remove(menu.selectedIndex);
+            editorSounds.delete(player);
             dropStore.save();
             plugin.messages().sendConfigured(player, "custom-drop-removed");
             openCustomDropsMenu(player, definition.getId(), menu.returnPage);
             return;
         }
-        if (slot == 15 || slot == 22) {
+        if (slot == GuiSlots.bottomMiddleSlot(3)) {
+            editorSounds.back(player);
             openCustomDropEntryMenu(player, definition.getId(), menu.selectedIndex, menu.returnPage);
         }
     }
@@ -1633,6 +1706,7 @@ public class EditorManager implements Listener {
         }
 
         if (slot == 22) {
+            editorSounds.back(player);
             openCustomDropsMenu(player, definition.getId(), menu.returnPage);
             return;
         }
@@ -1642,6 +1716,7 @@ public class EditorManager implements Listener {
         }
 
         if (definition.getCustomDrops().size() >= plugin.getMaxCustomDropsPerProfile()) {
+            editorSounds.error(player);
             plugin.messages().sendConfigured(player, "custom-drop-limit-reached", "{max}", String.valueOf(plugin.getMaxCustomDropsPerProfile()));
             return;
         }
@@ -1649,12 +1724,14 @@ public class EditorManager implements Listener {
         if (slot == 11) {
             ItemStack inputItem = CursorItemEditor.cloneItem(cursor).orElse(null);
             if (inputItem == null) {
+                editorSounds.addItemError(player);
                 plugin.messages().sendConfigured(player, "cursor-required");
                 return;
             }
 
             int amount = Math.min(Math.max(1, inputItem.getAmount()), plugin.getMaxDropAmount());
             definition.getCustomDrops().add(new CustomDropEntry(inputItem, 100.0D, amount, amount, DropDeliveryMode.GROUND, plugin.getMaxDropAmount()));
+            editorSounds.addItem(player);
             dropStore.save();
             plugin.messages().sendConfigured(player, "custom-drop-added");
             openCustomDropsMenu(player, definition.getId(), menu.returnPage);
@@ -1662,6 +1739,7 @@ public class EditorManager implements Listener {
         }
 
         if (plugin.getMaxCommandsPerEntry() <= 0) {
+            editorSounds.error(player);
             plugin.messages().sendConfigured(player, "command-limit-reached", "{max}", String.valueOf(plugin.getMaxCommandsPerEntry()));
             return;
         }
@@ -1693,6 +1771,7 @@ public class EditorManager implements Listener {
             DropCommandAction action = entry.getCommands().get(commandIndex);
             if (clickType == ClickType.SHIFT_RIGHT) {
                 if (!entry.isItemReward() && entry.getCommands().size() <= 1) {
+                    editorSounds.error(player);
                     plugin.messages().sendConfigured(player, "custom-drop-command-required");
                     return;
                 }
@@ -1717,6 +1796,7 @@ public class EditorManager implements Listener {
 
         if (slot == 47) {
             if (entry.getCommands().size() >= plugin.getMaxCommandsPerEntry()) {
+                editorSounds.error(player);
                 plugin.messages().sendConfigured(player, "command-limit-reached", "{max}", String.valueOf(plugin.getMaxCommandsPerEntry()));
                 return;
             }
@@ -1725,15 +1805,18 @@ public class EditorManager implements Listener {
             return;
         }
         if (slot == GuiSlots.bottomMiddleSlot(6)) {
+            editorSounds.back(player);
             openCustomDropEntryMenu(player, definition.getId(), menu.selectedIndex, menu.returnPage);
             return;
         }
         int totalPages = Math.max(1, (int) Math.ceil(entry.getCommands().size() / (double) GRID_SLOTS.length));
         if (slot == 45 && menu.page > 0) {
+            editorSounds.previousPage(player);
             openCommandMenu(player, definition.getId(), menu.selectedIndex, menu.page - 1, menu.returnPage);
             return;
         }
         if (slot == 53 && menu.page < totalPages - 1) {
+            editorSounds.nextPage(player);
             openCommandMenu(player, definition.getId(), menu.selectedIndex, menu.page + 1, menu.returnPage);
         }
     }
@@ -1751,9 +1834,7 @@ public class EditorManager implements Listener {
         }
 
         if (input.equalsIgnoreCase("cancel")) {
-            chatPrompts.remove(player.getUniqueId());
-            plugin.messages().sendConfigured(player, "prompt-cancelled");
-            reopenAfterPrompt(player, prompt);
+            cancelPrompt(player, prompt);
             return;
         }
 
@@ -1781,6 +1862,7 @@ public class EditorManager implements Listener {
         DropDefinition definition = dropStore.getDrop(prompt.dropId);
         if (definition == null) {
             chatPrompts.remove(player.getUniqueId());
+            editorSounds.error(player);
             plugin.messages().sendConfigured(player, "drop-missing");
             openMainMenu(player, 0);
             return;
@@ -1806,6 +1888,7 @@ public class EditorManager implements Listener {
                 }
                 definition.setName(input.trim());
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "drop-renamed", "{name}", input.trim());
                 openDropMenu(player, definition.getId());
@@ -1818,6 +1901,7 @@ public class EditorManager implements Listener {
                 }
                 definition.setPriority(value);
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "drop-priority-updated", "{priority}", String.valueOf(value));
                 openDropMenu(player, definition.getId());
@@ -1840,6 +1924,7 @@ public class EditorManager implements Listener {
 
                 entry.setChance(chance);
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "custom-drop-chance-updated", "{chance}", trimChance(chance));
                 openCustomDropEntryMenu(player, definition.getId(), prompt.entryIndex, prompt.returnPage);
@@ -1858,6 +1943,7 @@ public class EditorManager implements Listener {
 
                 entry.setAmountRange(amountRange[0], amountRange[1], plugin.getMaxDropAmount());
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "custom-drop-amount-updated",
                     "{min}", String.valueOf(amountRange[0]),
@@ -1870,6 +1956,7 @@ public class EditorManager implements Listener {
                 definition.getConditions().getWorlds().addAll(worlds);
                 definition.getConditions().getDisabledWorlds().clear();
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "worlds");
                 openConditionsMenu(player, definition.getId());
@@ -1879,6 +1966,7 @@ public class EditorManager implements Listener {
                 definition.getConditions().getBiomes().clear();
                 definition.getConditions().getBiomes().addAll(biomes);
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "biomes");
                 openConditionsMenu(player, definition.getId());
@@ -1888,6 +1976,7 @@ public class EditorManager implements Listener {
                 definition.getConditions().getTargets().clear();
                 definition.getConditions().getTargets().addAll(targets);
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "targets");
                 openDropMenu(player, definition.getId());
@@ -1895,6 +1984,7 @@ public class EditorManager implements Listener {
             case CONDITION_PERMISSION -> {
                 definition.getConditions().setPermission(input.equalsIgnoreCase("none") ? "" : input);
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "permission");
                 openConditionsMenu(player, definition.getId());
@@ -1904,6 +1994,7 @@ public class EditorManager implements Listener {
                 definition.getConditions().getTools().clear();
                 definition.getConditions().getTools().addAll(tools);
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "tools");
                 openConditionsMenu(player, definition.getId());
@@ -1916,6 +2007,7 @@ public class EditorManager implements Listener {
                 }
                 definition.getConditions().setFortuneMin(value);
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "fortune-min");
                 openConditionsMenu(player, definition.getId());
@@ -1932,6 +2024,7 @@ public class EditorManager implements Listener {
                     definition.getConditions().setTimeRange(range[0], range[1]);
                 }
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "time");
                 openConditionsMenu(player, definition.getId());
@@ -1945,6 +2038,7 @@ public class EditorManager implements Listener {
                 definition.getConditions().getWeather().clear();
                 definition.getConditions().getWeather().addAll(weather);
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "weather");
                 openConditionsMenu(player, definition.getId());
@@ -1957,6 +2051,7 @@ public class EditorManager implements Listener {
                 }
                 definition.getConditions().setCooldownMs(value);
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "cooldown-ms");
                 openConditionsMenu(player, definition.getId());
@@ -1964,6 +2059,7 @@ public class EditorManager implements Listener {
             case COMMAND_DROP_ADD -> {
                 if (plugin.getMaxCommandsPerEntry() <= 0) {
                     chatPrompts.remove(player.getUniqueId());
+                    editorSounds.error(player);
                     plugin.messages().sendConfigured(player, "command-limit-reached", "{max}", String.valueOf(plugin.getMaxCommandsPerEntry()));
                     openCustomDropsMenu(player, definition.getId(), prompt.returnPage);
                     return;
@@ -1971,6 +2067,7 @@ public class EditorManager implements Listener {
 
                 if (definition.getCustomDrops().size() >= plugin.getMaxCustomDropsPerProfile()) {
                     chatPrompts.remove(player.getUniqueId());
+                    editorSounds.error(player);
                     plugin.messages().sendConfigured(player, "custom-drop-limit-reached", "{max}", String.valueOf(plugin.getMaxCustomDropsPerProfile()));
                     openCustomDropsMenu(player, definition.getId(), prompt.returnPage);
                     return;
@@ -1994,6 +2091,7 @@ public class EditorManager implements Listener {
                 );
                 definition.getCustomDrops().add(entry);
                 dropStore.save();
+                editorSounds.add(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "custom-command-added");
                 openCustomDropsMenu(player, definition.getId(), prompt.returnPage);
@@ -2005,6 +2103,7 @@ public class EditorManager implements Listener {
                 }
                 if (entry.getCommands().size() >= plugin.getMaxCommandsPerEntry()) {
                     chatPrompts.remove(player.getUniqueId());
+                    editorSounds.error(player);
                     plugin.messages().sendConfigured(player, "command-limit-reached", "{max}", String.valueOf(plugin.getMaxCommandsPerEntry()));
                     openCommandMenu(player, definition.getId(), prompt.entryIndex, prompt.page, prompt.returnPage);
                     return;
@@ -2018,6 +2117,7 @@ public class EditorManager implements Listener {
 
                 entry.getCommands().add(command);
                 dropStore.save();
+                editorSounds.add(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "command-added");
                 openCommandMenu(player, definition.getId(), prompt.entryIndex, prompt.page, prompt.returnPage);
@@ -2040,6 +2140,7 @@ public class EditorManager implements Listener {
 
                 entry.getCommands().get(prompt.commandIndex).setCommand(input.trim());
                 dropStore.save();
+                editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "command-updated");
                 openCommandMenu(player, definition.getId(), prompt.entryIndex, prompt.page, prompt.returnPage);
@@ -2056,6 +2157,7 @@ public class EditorManager implements Listener {
 
         if (dropStore.getAllDrops().size() >= plugin.getMaxProfiles()) {
             chatPrompts.remove(player.getUniqueId());
+            editorSounds.error(player);
             plugin.messages().sendConfigured(player, "drop-limit-reached", "{max}", String.valueOf(plugin.getMaxProfiles()));
             openMainMenu(player, prompt.page);
             return;
@@ -2063,6 +2165,7 @@ public class EditorManager implements Listener {
 
         DropDefinition created = dropStore.createDrop(name);
         chatPrompts.remove(player.getUniqueId());
+        editorSounds.add(player);
         plugin.messages().sendConfigured(player, "drop-created", "{id}", created.getId());
         openDropMenu(player, created.getId());
     }
@@ -2095,6 +2198,7 @@ public class EditorManager implements Listener {
     private CustomDropEntry getPromptEntry(Player player, DropDefinition definition, ChatPrompt prompt) {
         if (prompt.entryIndex < 0 || prompt.entryIndex >= definition.getCustomDrops().size()) {
             chatPrompts.remove(player.getUniqueId());
+            editorSounds.error(player);
             plugin.messages().sendConfigured(player, "custom-drop-missing");
             openCustomDropsMenu(player, definition.getId(), prompt.returnPage);
             return null;
@@ -2160,7 +2264,7 @@ public class EditorManager implements Listener {
             core.scheduler()
         );
 
-        EditorDialogInputs.openTextFromInventory(
+        boolean openedNative = EditorDialogInputs.openTextFromInventory(
             plugin,
             core.inventoryCloseSuppressor(),
             dialogs,
@@ -2169,6 +2273,9 @@ public class EditorManager implements Listener {
             input -> handlePromptInput(player, nativePrompt, input == null ? "" : input.trim()),
             () -> cancelPrompt(player, nativePrompt)
         );
+        if (openedNative) {
+            editorSounds.open(player);
+        }
     }
 
     private DialogService fallbackDialogService(NativeDialogSupport nativeDialogs, ChatPrompt prompt) {
@@ -2203,11 +2310,13 @@ public class EditorManager implements Listener {
 
     private void cancelPrompt(Player player, ChatPrompt prompt) {
         chatPrompts.remove(player.getUniqueId());
+        editorSounds.back(player);
         plugin.messages().sendConfigured(player, "prompt-cancelled");
         reopenAfterPrompt(player, prompt);
     }
 
     private void rejectPromptInput(Player player, ChatPrompt prompt, String messageKey, String... placeholders) {
+        editorSounds.error(player);
         plugin.messages().sendConfigured(player, messageKey, placeholders);
         if (prompt.nativeDialog) {
             chatPrompts.remove(player.getUniqueId());

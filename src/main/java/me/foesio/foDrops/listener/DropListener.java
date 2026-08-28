@@ -5,6 +5,7 @@ import me.foesio.core.inventory.InventoryDepositResultMode;
 import me.foesio.core.inventory.InventoryDepositService;
 import me.foesio.core.inventory.OverflowPolicy;
 import me.foesio.core.item.FoItemStacks;
+import me.foesio.core.sound.FoSoundService;
 import me.foesio.foDrops.FoDrops;
 import me.foesio.foDrops.drop.DropContext;
 import me.foesio.foDrops.drop.DropEngine;
@@ -59,9 +60,9 @@ public class DropListener implements Listener {
     private final Map<BlockKey, PendingTntSource> pendingTntSources = new HashMap<>();
     private final Map<UUID, PendingTntSource> tntSourcesByEntity = new HashMap<>();
 
-    public DropListener(FoDrops plugin, DropStore dropStore, FoCoreContext core) {
+    public DropListener(FoDrops plugin, DropStore dropStore, FoCoreContext core, FoSoundService sounds) {
         this.inventoryDeposits = core.inventoryDeposits();
-        this.dropEngine = new DropEngine(plugin, dropStore, inventoryDeposits);
+        this.dropEngine = new DropEngine(plugin, dropStore, inventoryDeposits, sounds);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

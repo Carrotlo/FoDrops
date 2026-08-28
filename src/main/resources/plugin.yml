@@ -12,7 +12,6 @@ commands:
     description: Main command for FoDrops.
     usage: /<command> <version|editor|reload>
     aliases: [ drops ]
-    permission: fodrops.admin
 
 permissions:
   fodrops.admin:

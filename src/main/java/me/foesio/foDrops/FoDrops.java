@@ -10,6 +10,9 @@ import me.foesio.core.message.FoMessageService;
 import me.foesio.core.message.FoStyle;
 import me.foesio.core.reload.FoReloadRegistry;
 import me.foesio.core.reload.FoReloadResult;
+import me.foesio.core.sound.FoAdminSounds;
+import me.foesio.core.sound.FoEditorSounds;
+import me.foesio.core.sound.FoSoundService;
 import me.foesio.core.update.UpdateNoticeService;
 import me.foesio.foDrops.command.FoDropsCommand;
 import me.foesio.foDrops.drop.DropStore;
@@ -35,6 +38,9 @@ public final class FoDrops extends JavaPlugin {
     private static final int HARD_MAX_DROP_AMOUNT = 4096;
 
     private FoCoreContext core;
+    private FoSoundService sounds;
+    private FoAdminSounds adminSounds;
+    private FoEditorSounds editorSounds;
     private UpdateNoticeService updateNotices;
     private DropStore dropStore;
     private FoMessageService messages;
@@ -50,16 +56,19 @@ public final class FoDrops extends JavaPlugin {
         core = FoPluginCore.create(this, currentNativeDialogSettings());
         core.warnIfNativeDialogsUnavailable();
         core.metrics(BSTATS_PLUGIN_ID);
-        updateNotices = core.createUpdateNotices(messages, MODRINTH_PROJECT_ID).start();
+        sounds = core.createSounds();
+        adminSounds = FoAdminSounds.create(sounds);
+        editorSounds = FoEditorSounds.create(sounds);
+        updateNotices = core.createUpdateNotices(messages, MODRINTH_PROJECT_ID, adminSounds).start();
 
         dropStore = new DropStore(this);
         dropStore.load();
 
-        editorManager = new EditorManager(this, dropStore, core);
+        editorManager = new EditorManager(this, dropStore, core, editorSounds);
         getServer().getPluginManager().registerEvents(editorManager, this);
-        getServer().getPluginManager().registerEvents(new DropListener(this, dropStore, core), this);
+        getServer().getPluginManager().registerEvents(new DropListener(this, dropStore, core, sounds), this);
 
-        FoDropsCommand command = new FoDropsCommand(this, dropStore, editorManager, updateNotices);
+        FoDropsCommand command = new FoDropsCommand(this, dropStore, editorManager, updateNotices, adminSounds);
         if (getCommand("fodrops") != null) {
             getCommand("fodrops").setExecutor(command);
             getCommand("fodrops").setTabCompleter(command);
@@ -82,6 +91,9 @@ public final class FoDrops extends JavaPlugin {
             core = null;
         }
         updateNotices = null;
+        sounds = null;
+        adminSounds = null;
+        editorSounds = null;
     }
 
     public FoMessageService messages() {
@@ -101,6 +113,7 @@ public final class FoDrops extends JavaPlugin {
         return FoReloadRegistry.create()
             .addConfig(this)
             .addMessages(messages)
+            .add("sounds", sounds::reload)
             .add("config-defaults", this::ensureConfigDefaults)
             .add("dialog-inputs", this::refreshDialogInputState)
             .add("drops", dropStore::load)
