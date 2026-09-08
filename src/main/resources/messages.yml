@@ -1,5 +1,7 @@
+# Edit optional item icons here. Remove any :icon: token to hide it.
+# Unsupported servers, older Java clients, and Bedrock players automatically receive clean text without item sprites.
 tokens:
-  prefix: "{theme}FoDrops &8» {muted}"
+  prefix: ":hopper: {theme}FoDrops &8» {muted}"
   theme: "#03fc88"
   muted: "#a7b8b0"
   white: "#ffffff"
@@ -11,21 +13,20 @@ players-only: "{prefix} {bad}Only players can run this command."
 unknown-subcommand: "{prefix} {bad}Unknown subcommand: {theme}{arg}{bad}."
 
 help-header: "{prefix} {muted}Available commands:"
-help-version: "{prefix} {theme}/fodrops version {muted}- show plugin info"
+help-version: "{prefix} {theme}/fodrops version {muted}- check for updates"
 help-editor: "{prefix} {theme}/fodrops editor {muted}- open drop editor GUI"
 help-reload: "{prefix} {theme}/fodrops reload {muted}- reload config.yml, messages.yml, and drops.yml"
 help-count: "{prefix} {muted}Configured drop profiles: {theme}{count}"
 
-version: "{prefix} {muted}Author: {theme}Carrotio {muted}| Version: {theme}{version}"
-reloaded: "{prefix} {good}Reloaded config.yml, messages.yml, and drops.yml. Loaded {theme}{count} {good}drop profiles."
-reload-failed: "{prefix} {bad}Reload failed at {theme}{step}{bad}. {muted}{error}"
+reloaded: "{prefix}:emerald: {good}Reloaded config.yml, messages.yml, and drops.yml. Loaded {theme}{count} {good}drop profiles."
+reload-failed: "{prefix}:redstone: {bad}Reload failed at {theme}{step}{bad}. {muted}{error}"
 native-dialogs-fallback: "{prefix} {muted}Native dialogs are not supported on this server; using chat input mode."
-editor-saved: "{prefix} {good}Saved {theme}{setting}{good}."
-editor-save-failed: "{prefix} {bad}Could not save {theme}{setting}{bad}. {muted}{error}"
+editor-saved: "{prefix}:emerald: {good}Saved {theme}{setting}{good}."
+editor-save-failed: "{prefix}:redstone: {bad}Could not save {theme}{setting}{bad}. {muted}{error}"
 
-drop-created: "{prefix} {good}Created drop profile {theme}{id}{good}."
+drop-created: "{prefix}:emerald: {good}Created drop profile {theme}{id}{good}."
 drop-limit-reached: "{prefix} {bad}Drop profile limit reached ({theme}{max}{bad})."
-drop-deleted: "{prefix} {bad}Deleted drop profile {theme}{id}{bad}."
+drop-deleted: "{prefix}:lava_bucket: {bad}Deleted drop profile {theme}{id}{bad}."
 drop-missing: "{prefix} {bad}That drop profile no longer exists."
 drop-renamed: "{prefix} {good}Renamed drop to {theme}{name}{good}."
 drop-event-updated: "{prefix} {good}Event type set to {theme}{event}{good}."
@@ -33,10 +34,10 @@ drop-priority-updated: "{prefix} {good}Priority set to {theme}{priority}{good}."
 drop-cancel-updated: "{prefix} {muted}Cancel vanilla drops: {state}{muted}."
 drop-stop-updated: "{prefix} {muted}Stop processing: {state}{muted}."
 
-custom-drop-added: "{prefix} {good}Added a custom drop entry."
+custom-drop-added: "{prefix}:emerald: {good}Added a custom drop entry."
 custom-command-added: "{prefix} {good}Added a command reward."
 custom-drop-limit-reached: "{prefix} {bad}Custom drop limit reached ({theme}{max}{bad})."
-custom-drop-removed: "{prefix} {bad}Removed custom drop entry."
+custom-drop-removed: "{prefix}:lava_bucket: {bad}Removed custom drop entry."
 custom-drop-missing: "{prefix} {bad}That custom drop entry no longer exists."
 custom-drop-item-updated: "{prefix} {good}Updated custom drop item."
 custom-drop-chance-updated: "{prefix} {good}Chance updated to {theme}{chance}%{good}."
@@ -50,10 +51,10 @@ custom-drop-message: "{prefix} {good}You received {theme}{amount}x {item}{good} 
 
 condition-updated: "{prefix} {good}Updated condition: {theme}{condition}{good}."
 
-command-added: "{prefix} {good}Added command action."
+command-added: "{prefix}:paper: {good}Added command action."
 command-limit-reached: "{prefix} {bad}Command action limit reached ({theme}{max}{bad})."
 command-updated: "{prefix} {good}Updated command text."
-command-removed: "{prefix} {bad}Removed command action."
+command-removed: "{prefix}:lava_bucket: {bad}Removed command action."
 command-sender-updated: "{prefix} {good}Command sender set to {theme}{sender}{good}."
 command-missing: "{prefix} {bad}That command no longer exists."
 

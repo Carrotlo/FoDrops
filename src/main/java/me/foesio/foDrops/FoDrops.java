@@ -54,6 +54,7 @@ public final class FoDrops extends JavaPlugin {
         ensureConfigDefaults();
 
         core = FoPluginCore.create(this, currentNativeDialogSettings());
+        migrateSprites();
         core.warnIfNativeDialogsUnavailable();
         core.metrics(BSTATS_PLUGIN_ID);
         sounds = core.createSounds();
@@ -226,6 +227,24 @@ public final class FoDrops extends JavaPlugin {
             .removeExact("version-update-available", "{prefix} {bad}Update available: {theme}{latest} {muted}(current: {current}) {theme}{url}")
             .removeExact("version-check-failed", "{prefix} {bad}Could not check Modrinth for updates right now.")
             .build();
+    }
+
+    private void migrateSprites() {
+        messages.migrateToVersion(core.migrations(), 1, config -> {
+            boolean changed = false;
+            changed |= FoMessageService.addMissingToken(config, "tokens.prefix", ":hopper:", null);
+            changed |= FoMessageService.addMissingToken(config, "reloaded", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "reload-failed", ":redstone:");
+            changed |= FoMessageService.addMissingToken(config, "editor-saved", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "editor-save-failed", ":redstone:");
+            changed |= FoMessageService.addMissingToken(config, "drop-created", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "drop-deleted", ":lava_bucket:");
+            changed |= FoMessageService.addMissingToken(config, "custom-drop-added", ":emerald:");
+            changed |= FoMessageService.addMissingToken(config, "custom-drop-removed", ":lava_bucket:");
+            changed |= FoMessageService.addMissingToken(config, "command-added", ":paper:");
+            changed |= FoMessageService.addMissingToken(config, "command-removed", ":lava_bucket:");
+            return true;
+        });
     }
 
     private boolean migrateLegacyConfigMessages(FileConfiguration messageConfig, boolean overrideWithLegacyMessages) {

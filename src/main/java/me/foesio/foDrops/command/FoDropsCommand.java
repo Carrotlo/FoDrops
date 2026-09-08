@@ -49,7 +49,6 @@ public class FoDropsCommand implements CommandExecutor, TabCompleter {
 
         String subcommand = args[0].toLowerCase();
         if (subcommand.equals("version")) {
-            plugin.messages().sendConfigured(sender, "version", "{version}", plugin.getDescription().getVersion());
             updateNotices.checkAndSendVersion(sender);
             return true;
         }

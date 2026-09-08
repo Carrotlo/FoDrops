@@ -2,6 +2,7 @@ package me.foesio.foDrops.editor;
 
 import me.foesio.core.FoCoreContext;
 import me.foesio.core.dialog.DialogButton;
+import me.foesio.core.dialog.DialogIcons;
 import me.foesio.core.dialog.DialogService;
 import me.foesio.core.dialog.DialogServiceFactory;
 import me.foesio.core.dialog.FallbackDialogService;
@@ -37,6 +38,8 @@ import me.foesio.core.selector.TriStateSelectionRequest;
 import me.foesio.core.selector.TriStateSelectionState;
 import me.foesio.core.selector.TriStateSelections;
 import me.foesio.core.selector.WorldSelectionEntries;
+import me.foesio.core.message.FoStyle;
+import me.foesio.core.text.FoText;
 import me.foesio.core.sound.FoEditorSounds;
 import me.foesio.foDrops.FoDrops;
 import me.foesio.foDrops.drop.CustomDropEntry;
@@ -137,7 +140,7 @@ public class EditorManager implements Listener {
     }
 
     public void openEditorMenu(Player player) {
-        settingsEditor().open(player);
+        player.openInventory(settingsEditor().open(player));
     }
 
     public void openEditorFromCommand(Player player) {
@@ -309,7 +312,7 @@ public class EditorManager implements Listener {
         String normalizedFilter = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
         List<EntryBrowserRequest.Entry> entries = drops.stream()
             .filter(definition -> matchesFilter(definition.getId() + " " + definition.getName() + " " + definition.getEventType().getDisplayName(), normalizedFilter))
-            .map(definition -> EntryBrowserRequest.Entry.of(definition.getId(), createItem(
+            .map(definition -> EntryBrowserRequest.Entry.of(definition.getId(), button(player,
                 Material.CHEST,
                 "{theme}" + definition.getName(),
                 "{white}ID: {theme}" + definition.getId(),
@@ -331,7 +334,7 @@ public class EditorManager implements Listener {
             .buttons(buttons)
             .showBack(true)
             .context(new MainBrowserContext())
-            .addButton(createItem(Material.ANVIL, "{theme}Add Drop", "{white}Create a new drop profile", "{white}and open its editor.", "{white}Limit: {theme}" + drops.size() + "/" + plugin.getMaxProfiles()))
+            .addButton(button(player, Material.ANVIL, "{theme}Add Drop", "{white}Create a new drop profile", "{white}and open its editor.", "{white}Limit: {theme}" + drops.size() + "/" + plugin.getMaxProfiles()))
             .build());
     }
 
@@ -351,15 +354,15 @@ public class EditorManager implements Listener {
         Inventory inventory = Bukkit.createInventory(menu, 36, getGuiTitle(TITLE_DROP, "{name}", definition.getName()));
         menu.setInventory(inventory);
 
-        inventory.setItem(10, createItem(
+        inventory.setItem(10, button(player,
             Material.NAME_TAG,
             "{theme}Rename Drop",
             "{white}Current: {theme}" + definition.getName(),
             "",
             "{white}Click and type in chat."
         ));
-        inventory.setItem(11, createItem(Material.COMPASS, "{theme}Event Type", buildEventTypeLore(definition)));
-        inventory.setItem(12, createItem(
+        inventory.setItem(11, button(player, Material.COMPASS, "{theme}Event Type", buildEventTypeLore(definition)));
+        inventory.setItem(12, button(player,
             Material.BOOK,
             "{theme}Event Targets",
             "{white}Current: " + formatList(definition.getConditions().getTargets(), 4),
@@ -370,41 +373,41 @@ public class EditorManager implements Listener {
             "{white}targets or {theme}none {white}to clear.",
             "{white}Example: {theme}stone"
         ));
-        inventory.setItem(13, createItem(
+        inventory.setItem(13, button(player,
             Material.HOPPER,
             "{theme}Conditions",
             "{white}Configured: " + (definition.getConditions().hasAnyRestrictions() ? "{good}Yes" : "{bad}No"),
             "",
             "{white}Click to edit condition rules."
         ));
-        inventory.setItem(14, createItem(
+        inventory.setItem(14, button(player,
             Material.CLOCK,
             "{theme}Priority",
             "{white}Current: {theme}" + definition.getPriority(),
             "",
             "{white}Click to set priority in chat."
         ));
-        inventory.setItem(15, createItem(
+        inventory.setItem(15, button(player,
             definition.isCancelVanillaDrops() ? Material.LIME_DYE : Material.RED_DYE,
             definition.isCancelVanillaDrops() ? "{good}Cancel Vanilla Drops: ON" : "{bad}Cancel Vanilla Drops: OFF",
             "{white}If ON, matching profile removes",
             "{white}vanilla drops when possible."
         ));
-        inventory.setItem(16, createItem(
+        inventory.setItem(16, button(player,
             definition.isStopProcessing() ? Material.LIME_DYE : Material.RED_DYE,
             definition.isStopProcessing() ? "{good}Stop Processing: ON" : "{bad}Stop Processing: OFF",
             "{white}If ON, lower-priority profiles",
             "{white}won't run after this one matches."
         ));
-        inventory.setItem(19, createItem(
+        inventory.setItem(19, button(player,
             Material.CHEST,
             "{theme}Custom Drops",
             "{white}Entries: {theme}" + definition.getCustomDrops().size(),
             "",
             "{white}Click to edit entry list."
         ));
-        inventory.setItem(20, createItem(Material.LAVA_BUCKET, "{bad}Delete Drop", "{white}Remove this drop profile."));
-        inventory.setItem(GuiSlots.bottomMiddleSlot(4), buttons.back());
+        inventory.setItem(20, button(player, Material.LAVA_BUCKET, "{bad}Delete Drop", "{white}Remove this drop profile."));
+        inventory.setItem(GuiSlots.bottomMiddleSlot(4), buttons.back(player));
 
         fillBackground(inventory);
         player.openInventory(inventory);
@@ -422,7 +425,7 @@ public class EditorManager implements Listener {
         Inventory inventory = Bukkit.createInventory(menu, 27, getGuiTitle(TITLE_CONFIRM_DELETE));
         menu.setInventory(inventory);
 
-        inventory.setItem(11, createItem(
+        inventory.setItem(11, button(player,
             Material.LAVA_BUCKET,
             "{bad}Delete Forever",
             "{white}Profile: {theme}" + definition.getName(),
@@ -430,7 +433,7 @@ public class EditorManager implements Listener {
             "",
             "{bad}This cannot be undone."
         ));
-        inventory.setItem(GuiSlots.bottomMiddleSlot(3), buttons.back());
+        inventory.setItem(GuiSlots.bottomMiddleSlot(3), buttons.back(player));
 
         fillBackground(inventory);
         player.openInventory(inventory);
@@ -448,19 +451,19 @@ public class EditorManager implements Listener {
         Inventory inventory = Bukkit.createInventory(menu, 27, getGuiTitle(TITLE_ADD_CUSTOM_DROP));
         menu.setInventory(inventory);
 
-        inventory.setItem(11, createItem(
+        inventory.setItem(11, button(player,
             Material.CHEST,
             "{theme}Item Reward",
             "{white}Adds the item held",
             "{white}on your cursor."
         ));
-        inventory.setItem(15, createItem(
+        inventory.setItem(15, button(player,
             Material.COMMAND_BLOCK,
             "{theme}Command Reward",
             "{white}Runs a command without",
             "{white}dropping an item."
         ));
-        inventory.setItem(GuiSlots.bottomMiddleSlot(3), buttons.back());
+        inventory.setItem(GuiSlots.bottomMiddleSlot(3), buttons.back(player));
 
         fillBackground(inventory);
         player.openInventory(inventory);
@@ -543,12 +546,12 @@ public class EditorManager implements Listener {
         Inventory inventory = Bukkit.createInventory(menu, 36, getGuiTitle(TITLE_CONDITIONS));
         menu.setInventory(inventory);
 
-        inventory.setItem(10, EditorItemFactory.worlds(
+        inventory.setItem(10, EditorItemFactory.worlds(player,
             conditions.getWorlds().size(),
             conditions.getDisabledWorlds().size(),
             "No override"
         ));
-        inventory.setItem(11, createItem(
+        inventory.setItem(11, button(player,
             Material.OAK_SAPLING,
             "{theme}Biomes",
             "{white}" + formatList(conditions.getBiomes(), 4),
@@ -556,7 +559,7 @@ public class EditorManager implements Listener {
             "{white}Click to set biome names",
             "{white}or {theme}none {white}to clear."
         ));
-        inventory.setItem(12, createItem(
+        inventory.setItem(12, button(player,
             Material.WATER_BUCKET,
             "{theme}Weather",
             "{white}" + formatWeather(conditions.getWeather()),
@@ -564,7 +567,7 @@ public class EditorManager implements Listener {
             "{white}Values: clear, rain, thunder",
             "{white}or {theme}none {white}to clear."
         ));
-        inventory.setItem(13, createItem(
+        inventory.setItem(13, button(player,
             Material.IRON_PICKAXE,
             "{theme}Tool Type",
             "{white}" + formatList(conditions.getTools(), 4),
@@ -572,19 +575,19 @@ public class EditorManager implements Listener {
             "{white}Use material names or tags",
             "{white}like {theme}DIAMOND_PICKAXE{white}, {theme}tag:pickaxe"
         ));
-        inventory.setItem(14, createItem(
+        inventory.setItem(14, button(player,
             Material.ENCHANTED_BOOK,
             "{theme}Silk Touch",
             buildSilkTouchLore(conditions.getSilkTouchMode())
         ));
-        inventory.setItem(15, createItem(
+        inventory.setItem(15, button(player,
             Material.EXPERIENCE_BOTTLE,
             "{theme}Fortune Min",
             "{white}Current: {theme}" + conditions.getFortuneMin(),
             "",
             "{white}Click to set minimum level."
         ));
-        inventory.setItem(16, createItem(
+        inventory.setItem(16, button(player,
             Material.PAPER,
             "{theme}Permission",
             "{white}" + (conditions.getPermission().isBlank() ? "{muted}None" : "{theme}" + conditions.getPermission()),
@@ -592,7 +595,7 @@ public class EditorManager implements Listener {
             "{white}Click to set required permission",
             "{white}or {theme}none {white}to clear."
         ));
-        inventory.setItem(19, createItem(
+        inventory.setItem(19, button(player,
             Material.CLOCK,
             "{theme}Time Range",
             "{white}Current: {theme}" + formatTimeRange(conditions),
@@ -600,7 +603,7 @@ public class EditorManager implements Listener {
             "{white}Format: {theme}min-max {white}(0-23999)",
             "{white}or {theme}none {white}to clear."
         ));
-        inventory.setItem(20, createItem(
+        inventory.setItem(20, button(player,
             Material.CLOCK,
             "{theme}Cooldown",
             "{white}Current: {theme}" + conditions.getCooldownMs() + "ms",
@@ -609,7 +612,7 @@ public class EditorManager implements Listener {
             "{white}{theme}0 {white}= disabled.",
             "{white}Click to set value in chat."
         ));
-        inventory.setItem(GuiSlots.bottomMiddleSlot(4), buttons.back());
+        inventory.setItem(GuiSlots.bottomMiddleSlot(4), buttons.back(player));
 
         fillBackground(inventory);
         player.openInventory(inventory);
@@ -640,7 +643,7 @@ public class EditorManager implements Listener {
             if (!matchesFilter(customDropSearchText(entry, index), normalizedFilter)) {
                 continue;
             }
-            entries.add(EntryBrowserRequest.Entry.of(String.valueOf(index), customDropIcon(definition, entry, index)));
+            entries.add(EntryBrowserRequest.Entry.of(String.valueOf(index), customDropIcon(player, definition, entry, index)));
         }
         EntryBrowserMenus.open(player, EntryBrowserRequest.builder()
             .title(TITLE_CUSTOM)
@@ -650,7 +653,7 @@ public class EditorManager implements Listener {
             .buttons(buttons)
             .showBack(true)
             .context(new CustomBrowserContext(dropId))
-            .addButton(createItem(Material.ANVIL, "{theme}Add Custom Drop", "{white}Choose item reward or", "{white}command reward.", "{white}Limit: {theme}" + customDrops.size() + "/" + plugin.getMaxCustomDropsPerProfile()))
+            .addButton(button(player, Material.ANVIL, "{theme}Add Custom Drop", "{white}Choose item reward or", "{white}command reward.", "{white}Limit: {theme}" + customDrops.size() + "/" + plugin.getMaxCustomDropsPerProfile()))
             .build());
     }
 
@@ -658,31 +661,27 @@ public class EditorManager implements Listener {
         return (entry.isItemReward() ? "item " + entry.getItem().getType().name() : "command") + " " + (index + 1);
     }
 
-    private ItemStack customDropIcon(DropDefinition definition, CustomDropEntry entry, int index) {
+    private ItemStack customDropIcon(Player player, DropDefinition definition, CustomDropEntry entry, int index) {
+        if (entry.isItemReward()) {
+            return DialogIcons.forViewer(player, entry.getItem().clone());
+        }
         double expectedValue = (entry.getChance() / 100.0D) * ((entry.getMinAmount() + entry.getMaxAmount()) / 2.0D);
         String gateLine = definition.getConditions().hasAnyRestrictions() ? "{muted}Profile gate: context-dependent" : "{good}Profile gate: always active";
-        ItemStack item = entry.isItemReward() ? entry.getItem() : new ItemStack(Material.COMMAND_BLOCK);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName(plugin.messages().renderTemplate(entry.isItemReward() ? "{theme}Drop #" + (index + 1) : "{theme}Command Reward #" + (index + 1)));
-            List<String> lore = new ArrayList<>();
-            lore.add(plugin.messages().renderTemplate("{white}Type: " + (entry.isItemReward() ? "{theme}Item" : "{theme}Command")));
-            lore.add(plugin.messages().renderTemplate("{white}Chance: {theme}" + trimChance(entry.getChance()) + "%"));
-            if (entry.isItemReward()) {
-                lore.add(plugin.messages().renderTemplate("{white}Amount: {theme}" + entry.getMinAmount() + " - " + entry.getMaxAmount()));
-                lore.add(plugin.messages().renderTemplate("{white}Fortune: " + (entry.isRespectFortune() ? "{good}Enabled" : "{bad}Disabled")));
-                lore.add(plugin.messages().renderTemplate("{white}Delivery: " + formatDeliveryMode(entry.getDeliveryMode())));
-                lore.add(plugin.messages().renderTemplate("{white}Expected/Trigger: {theme}" + formatDecimal(expectedValue)));
-            }
-            lore.add(plugin.messages().renderTemplate("{white}Message: " + (entry.isSendMessage() ? "{good}Enabled" : "{bad}Disabled")));
-            addCommandRewardLore(lore, entry.getCommands());
-            lore.add(plugin.messages().renderTemplate(gateLine));
-            lore.add(plugin.messages().renderTemplate(""));
-            lore.add(plugin.messages().renderTemplate("{white}Click to edit this entry."));
-            meta.setLore(lore);
-            item.setItemMeta(meta);
+        List<String> lore = new ArrayList<>();
+        lore.add("{white}Type: " + (entry.isItemReward() ? "{theme}Item" : "{theme}Command"));
+        lore.add("{white}Chance: {theme}" + trimChance(entry.getChance()) + "%");
+        if (entry.isItemReward()) {
+            lore.add("{white}Amount: {theme}" + entry.getMinAmount() + " - " + entry.getMaxAmount());
+            lore.add("{white}Fortune: " + (entry.isRespectFortune() ? "{good}Enabled" : "{bad}Disabled"));
+            lore.add("{white}Delivery: " + formatDeliveryMode(entry.getDeliveryMode()));
+            lore.add("{white}Expected/Trigger: {theme}" + formatDecimal(expectedValue));
         }
-        return item;
+        lore.add("{white}Message: " + (entry.isSendMessage() ? "{good}Enabled" : "{bad}Disabled"));
+        addCommandRewardLore(lore, entry.getCommands());
+        lore.add(gateLine);
+        return button(player, Material.COMMAND_BLOCK,
+                entry.isItemReward() ? "{theme}Drop #" + (index + 1) : "{theme}Command Reward #" + (index + 1),
+                lore.toArray(String[]::new));
     }
 
     public void openCustomDropEntryMenu(Player player, String dropId, int entryIndex, int returnPage) {
@@ -703,21 +702,21 @@ public class EditorManager implements Listener {
         Inventory inventory = Bukkit.createInventory(menu, 36, getGuiTitle(TITLE_CUSTOM_ENTRY));
         menu.setInventory(inventory);
 
-        inventory.setItem(10, createItem(
+        inventory.setItem(10, button(player,
             Material.COMMAND_BLOCK,
             "{theme}Commands",
             "{white}Actions: {theme}" + entry.getCommands().size(),
             "",
             "{white}Click to edit commands."
         ));
-        inventory.setItem(11, createItem(
+        inventory.setItem(11, button(player,
             Material.GOLD_NUGGET,
             "{theme}Chance",
             "{white}Current: {theme}" + trimChance(entry.getChance()) + "%",
             "",
             "{white}Click to set chance in chat."
         ));
-        inventory.setItem(12, createItem(
+        inventory.setItem(12, button(player,
             entry.isItemReward() ? Material.IRON_INGOT : Material.GRAY_DYE,
             "{theme}Amount Range",
             entry.isItemReward()
@@ -728,7 +727,7 @@ public class EditorManager implements Listener {
                 ? "{white}Click to set amount range."
                 : "{muted}Enable item reward first."
         ));
-        inventory.setItem(13, createItem(
+        inventory.setItem(13, button(player,
             entry.isItemReward() ? Material.HOPPER : Material.GRAY_DYE,
             "{theme}Delivery Mode",
             entry.isItemReward()
@@ -739,7 +738,7 @@ public class EditorManager implements Listener {
                 ? "{white}Click to cycle mode."
                 : "{muted}Enable item reward first."
         ));
-        inventory.setItem(14, createItem(
+        inventory.setItem(14, button(player,
             entry.isSendMessage() ? Material.LIME_DYE : Material.RED_DYE,
             entry.isSendMessage() ? "{good}Send Message: ON" : "{bad}Send Message: OFF",
             "{white}Sends the reward message",
@@ -747,7 +746,7 @@ public class EditorManager implements Listener {
             "",
             "{white}Click to toggle."
         ));
-        inventory.setItem(16, createItem(
+        inventory.setItem(16, button(player,
             entry.isItemReward() ? Material.LIME_DYE : Material.RED_DYE,
             entry.isItemReward() ? "{good}Item Reward: ON" : "{bad}Item Reward: OFF",
             "{white}When OFF, this entry only",
@@ -755,7 +754,7 @@ public class EditorManager implements Listener {
             "",
             "{white}Click to toggle."
         ));
-        inventory.setItem(15, createItem(
+        inventory.setItem(15, button(player,
             !entry.isItemReward() ? Material.GRAY_DYE : entry.isRespectFortune() ? Material.LAPIS_LAZULI : Material.REDSTONE,
             !entry.isItemReward()
                 ? "{muted}Respect Fortune"
@@ -774,8 +773,8 @@ public class EditorManager implements Listener {
                 ? "{muted}Unavailable for command-only entries."
                 : "{white}Click to toggle."
         ));
-        inventory.setItem(22, createItem(Material.LAVA_BUCKET, "{bad}Delete Entry", "{white}Remove this custom drop entry."));
-        inventory.setItem(GuiSlots.bottomMiddleSlot(4), buttons.back());
+        inventory.setItem(22, button(player, Material.LAVA_BUCKET, "{bad}Delete Entry", "{white}Remove this custom drop entry."));
+        inventory.setItem(GuiSlots.bottomMiddleSlot(4), buttons.back(player));
 
         fillBackground(inventory);
         player.openInventory(inventory);
@@ -798,14 +797,14 @@ public class EditorManager implements Listener {
         Inventory inventory = Bukkit.createInventory(menu, 27, getGuiTitle(TITLE_CONFIRM_DELETE));
         menu.setInventory(inventory);
 
-        inventory.setItem(11, createItem(
+        inventory.setItem(11, button(player,
             Material.LAVA_BUCKET,
             "{bad}Delete Forever",
             "{white}Entry: {theme}#" + (entryIndex + 1),
             "",
             "{bad}This cannot be undone."
         ));
-        inventory.setItem(GuiSlots.bottomMiddleSlot(3), buttons.back());
+        inventory.setItem(GuiSlots.bottomMiddleSlot(3), buttons.back(player));
 
         fillBackground(inventory);
         player.openInventory(inventory);
@@ -842,7 +841,7 @@ public class EditorManager implements Listener {
             if (!matchesFilter(action.getCommand() + " " + action.getSenderType().getDisplayName(), normalizedFilter)) {
                 continue;
             }
-            entries.add(EntryBrowserRequest.Entry.of(String.valueOf(index), createItem(
+            entries.add(EntryBrowserRequest.Entry.of(String.valueOf(index), button(player,
                 action.getSenderType() == DropCommandSenderType.CONSOLE ? Material.COMMAND_BLOCK : Material.PAPER,
                 "{theme}Command #" + (index + 1),
                 "{white}Sender: {theme}" + action.getSenderType().getDisplayName(),
@@ -861,7 +860,7 @@ public class EditorManager implements Listener {
             .buttons(buttons)
             .showBack(true)
             .context(new CommandBrowserContext(dropId, entryIndex, returnPage))
-            .addButton(createItem(Material.ANVIL, "{theme}Add Command", "{white}Format in chat:", "{theme}<console|player> <command>", "{white}Limit: {theme}" + commands.size() + "/" + plugin.getMaxCommandsPerEntry()))
+            .addButton(button(player, Material.ANVIL, "{theme}Add Command", "{white}Format in chat:", "{theme}<console|player> <command>", "{white}Limit: {theme}" + commands.size() + "/" + plugin.getMaxCommandsPerEntry()))
             .build());
     }
 
@@ -2836,14 +2835,32 @@ public class EditorManager implements Listener {
         }
     }
 
-    private ItemStack createItem(Material material, String name, String... lore) {
-        List<String> builtLore = new ArrayList<>();
-        if (lore.length > 0) {
+    private ItemStack button(Player player, Material material, String name, String... lore) {
+        String renderedName = plugin.messages().renderTemplate(name);
+        String label = FoText.plain(renderedName).trim();
+        String normalizedLabel = label.toLowerCase(Locale.ROOT);
+        boolean enabled = normalizedLabel.endsWith(": on") || normalizedLabel.endsWith(" on")
+                || normalizedLabel.endsWith(": enabled") || normalizedLabel.endsWith(" enabled");
+        boolean disabled = normalizedLabel.endsWith(": off") || normalizedLabel.endsWith(" off")
+                || normalizedLabel.endsWith(": disabled") || normalizedLabel.endsWith(" disabled");
+        if (enabled || disabled) {
+            int separator = label.lastIndexOf(':');
+            label = label.substring(0, separator >= 0 ? separator : label.lastIndexOf(' ')).trim();
+        }
+
+        String color = renderedName.contains(FoStyle.BAD) ? FoStyle.BAD
+                : renderedName.contains(FoStyle.GOOD) ? FoStyle.GOOD : FoStyle.THEME;
+        List<String> information = new ArrayList<>();
+        if (lore != null) {
             for (String line : lore) {
-                builtLore.add(plugin.messages().renderTemplate(line));
+                information.add(plugin.messages().renderTemplate(line));
             }
         }
-        return EditorItemFactory.item(material, plugin.messages().renderTemplate(name), builtLore);
+        if ((enabled || disabled) && information.stream().noneMatch(line ->
+                FoText.plain(line).trim().toLowerCase(Locale.ROOT).startsWith("state:"))) {
+            information.add(0, "State: " + (enabled ? FoStyle.GOOD + "ON" : FoStyle.BAD + "OFF"));
+        }
+        return EditorItemFactory.button(player, material, color, label, information, "interact");
     }
 
     private String getGuiTitle(String title, String... placeholders) {
