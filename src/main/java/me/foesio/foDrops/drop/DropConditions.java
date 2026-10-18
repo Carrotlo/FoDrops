@@ -1,7 +1,9 @@
 package me.foesio.foDrops.drop;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class DropConditions {
     private final List<String> worlds = new ArrayList<>();
@@ -16,6 +18,8 @@ public class DropConditions {
     private Integer timeMin;
     private Integer timeMax;
     private final List<DropWeather> weather = new ArrayList<>();
+    private final List<String> requiredPlugins = new ArrayList<>();
+    private final Map<String, List<String>> entityPersistentData = new LinkedHashMap<>();
 
     public List<String> getWorlds() {
         return worlds;
@@ -93,6 +97,14 @@ public class DropConditions {
         return weather;
     }
 
+    public List<String> getRequiredPlugins() {
+        return requiredPlugins;
+    }
+
+    public Map<String, List<String>> getEntityPersistentData() {
+        return entityPersistentData;
+    }
+
     public boolean hasAnyRestrictions() {
         return !worlds.isEmpty()
             || !disabledWorlds.isEmpty()
@@ -105,7 +117,9 @@ public class DropConditions {
             || cooldownMs > 0L
             || timeMin != null
             || timeMax != null
-            || !weather.isEmpty();
+            || !weather.isEmpty()
+            || !requiredPlugins.isEmpty()
+            || !entityPersistentData.isEmpty();
     }
 
     private int normalizeTime(int value) {

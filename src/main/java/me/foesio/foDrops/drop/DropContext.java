@@ -5,6 +5,7 @@ import org.bukkit.World;
 import org.bukkit.block.Biome;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import java.util.Map;
 
 public class DropContext {
     private final DropEventType eventType;
@@ -16,6 +17,7 @@ public class DropContext {
     private final int silkTouchLevel;
     private final int fortuneLevel;
     private final String targetTypeKey;
+    private final Map<String, String> targetPersistentData;
 
     public DropContext(
         DropEventType eventType,
@@ -28,6 +30,22 @@ public class DropContext {
         int fortuneLevel,
         String targetTypeKey
     ) {
+        this(eventType, player, location, world, biome, tool, silkTouchLevel, fortuneLevel,
+            targetTypeKey, Map.of());
+    }
+
+    public DropContext(
+        DropEventType eventType,
+        Player player,
+        Location location,
+        World world,
+        Biome biome,
+        ItemStack tool,
+        int silkTouchLevel,
+        int fortuneLevel,
+        String targetTypeKey,
+        Map<String, String> targetPersistentData
+    ) {
         this.eventType = eventType;
         this.player = player;
         this.location = location;
@@ -37,6 +55,7 @@ public class DropContext {
         this.silkTouchLevel = silkTouchLevel;
         this.fortuneLevel = fortuneLevel;
         this.targetTypeKey = targetTypeKey;
+        this.targetPersistentData = Map.copyOf(targetPersistentData == null ? Map.of() : targetPersistentData);
     }
 
     public DropEventType getEventType() {
@@ -73,5 +92,9 @@ public class DropContext {
 
     public String getTargetTypeKey() {
         return targetTypeKey;
+    }
+
+    public Map<String, String> getTargetPersistentData() {
+        return targetPersistentData;
     }
 }

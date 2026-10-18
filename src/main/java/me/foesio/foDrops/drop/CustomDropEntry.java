@@ -5,12 +5,17 @@ import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
+import java.util.Set;
 
 public class CustomDropEntry {
     private static final int FALLBACK_MAX_AMOUNT = 64;
 
+    private final String id;
+    private final Set<String> tags;
     private ItemStack item;
     private double chance;
     private int minAmount;
@@ -76,6 +81,33 @@ public class CustomDropEntry {
         boolean sendMessage,
         boolean respectFortune
     ) {
+        this("", Set.of(), item, chance, minAmount, maxAmount, deliveryMode, commands, maxAmountLimit,
+            itemReward, sendMessage, respectFortune);
+    }
+
+    public CustomDropEntry(
+        String id,
+        Set<String> tags,
+        ItemStack item,
+        double chance,
+        int minAmount,
+        int maxAmount,
+        DropDeliveryMode deliveryMode,
+        List<DropCommandAction> commands,
+        int maxAmountLimit,
+        boolean itemReward,
+        boolean sendMessage,
+        boolean respectFortune
+    ) {
+        this.id = id == null ? "" : id.trim();
+        this.tags = new LinkedHashSet<>();
+        if (tags != null) {
+            tags.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(value -> value.trim().toLowerCase(Locale.ROOT))
+                .filter(value -> !value.isBlank())
+                .forEach(this.tags::add);
+        }
         setItem(item);
         setChance(chance);
         setAmountRange(minAmount, maxAmount, maxAmountLimit);
@@ -84,6 +116,18 @@ public class CustomDropEntry {
         setSendMessage(sendMessage);
         setRespectFortune(respectFortune);
         this.commands = new ArrayList<>(commands);
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public Set<String> getTags() {
+        return tags;
+    }
+
+    public boolean hasTag(String tag) {
+        return tag != null && tags.contains(tag.trim().toLowerCase(Locale.ROOT));
     }
 
     public CustomDropEntry(ItemStack item, double chance, int minAmount, int maxAmount, DropDeliveryMode deliveryMode) {
@@ -180,13 +224,18 @@ public class CustomDropEntry {
     }
 
     public boolean shouldDrop(Random random) {
-        if (chance <= 0.0D) {
+        return shouldDrop(random, chance);
+    }
+
+    public boolean shouldDrop(Random random, double effectiveChance) {
+        double checkedChance = Math.max(0.0D, Math.min(100.0D, effectiveChance));
+        if (checkedChance <= 0.0D) {
             return false;
         }
-        if (chance >= 100.0D) {
+        if (checkedChance >= 100.0D) {
             return true;
         }
-        return random.nextDouble() * 100.0D <= chance;
+        return random.nextDouble() * 100.0D <= checkedChance;
     }
 
     public ItemStack createDropItem(Random random) {

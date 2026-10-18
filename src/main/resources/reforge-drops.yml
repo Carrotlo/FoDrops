@@ -1,0 +1,211 @@
+# Installed when FoReforge is present. Unchanged defaults are removed while it is absent.
+# Edited profiles are kept, and owner-deleted profiles are not restored automatically.
+drops:
+  foreforge_egyptian_cat:
+    name: FoReforge - Egyptian Cat
+    event: MOB_KILL
+    cancel-vanilla-drops: false
+    priority: 0
+    stop-processing: false
+    conditions:
+      worlds: []
+      disabled-worlds: []
+      biomes: []
+      targets: []
+      required-plugins: [FoReforge]
+      entity-pdc:
+        'fodungeons:mob-profile': [egyptian_cat]
+      permission: ''
+      tools: []
+      silk-touch: IGNORE
+      fortune-min: 0
+      cooldown-ms: 0
+      weather: []
+    custom-drops:
+      cats-paw:
+        item-reward: false
+        send-message: false
+        respect-fortune: false
+        chance: 2.0
+        min-amount: 1
+        max-amount: 1
+        delivery-mode: INVENTORY
+        commands:
+          give:
+            sender: CONSOLE
+            command: foreforgeadmin give {player} cats-paw
+      tomblight:
+        item-reward: false
+        send-message: false
+        respect-fortune: false
+        chance: 1.2
+        min-amount: 1
+        max-amount: 1
+        delivery-mode: INVENTORY
+        commands:
+          give:
+            sender: CONSOLE
+            command: foreforgeadmin give {player} tomblight
+      cat-eye:
+        item-reward: false
+        send-message: false
+        respect-fortune: false
+        chance: 1.5
+        min-amount: 1
+        max-amount: 1
+        delivery-mode: INVENTORY
+        commands:
+          give:
+            sender: CONSOLE
+            command: foreforgeadmin give {player} cat-eye
+
+  foreforge_egyptian_vindicator:
+    name: FoReforge - Egyptian Vindicator
+    event: MOB_KILL
+    cancel-vanilla-drops: false
+    priority: 0
+    stop-processing: false
+    conditions:
+      worlds: []
+      disabled-worlds: []
+      biomes: []
+      targets: []
+      required-plugins: [FoReforge]
+      entity-pdc:
+        'fodungeons:mob-profile': [egyptian_vindicator]
+      permission: ''
+      tools: []
+      silk-touch: IGNORE
+      fortune-min: 0
+      cooldown-ms: 0
+      weather: []
+    custom-drops:
+      illagers-mark:
+        item-reward: false
+        send-message: false
+        respect-fortune: false
+        chance: 1.5
+        min-amount: 1
+        max-amount: 1
+        delivery-mode: INVENTORY
+        commands:
+          give:
+            sender: CONSOLE
+            command: foreforgeadmin give {player} illagers-mark
+      splitter:
+        item-reward: false
+        send-message: false
+        respect-fortune: false
+        chance: 0.8
+        min-amount: 1
+        max-amount: 1
+        delivery-mode: INVENTORY
+        commands:
+          give:
+            sender: CONSOLE
+            command: foreforgeadmin give {player} splitter
+      far-eye:
+        item-reward: false
+        send-message: false
+        respect-fortune: false
+        chance: 0.9
+        min-amount: 1
+        max-amount: 1
+        delivery-mode: INVENTORY
+        commands:
+          give:
+            sender: CONSOLE
+            command: foreforgeadmin give {player} far-eye
+      iron-bullet:
+        item-reward: false
+        send-message: false
+        respect-fortune: false
+        chance: 0.7
+        min-amount: 1
+        max-amount: 1
+        delivery-mode: INVENTORY
+        commands:
+          give:
+            sender: CONSOLE
+            command: foreforgeadmin give {player} iron-bullet
+
+  foreforge_egyptian_parched:
+    name: FoReforge - Egyptian Parched
+    event: MOB_KILL
+    cancel-vanilla-drops: false
+    priority: 0
+    stop-processing: false
+    conditions:
+      worlds: []
+      disabled-worlds: []
+      biomes: []
+      targets: []
+      required-plugins: [FoReforge]
+      entity-pdc:
+        'fodungeons:mob-profile': [egyptian_parched]
+      permission: ''
+      tools: []
+      silk-touch: IGNORE
+      fortune-min: 0
+      cooldown-ms: 0
+      weather: []
+    custom-drops:
+      current-rider:
+        item-reward: false
+        send-message: false
+        respect-fortune: false
+        chance: 1.0
+        min-amount: 1
+        max-amount: 1
+        delivery-mode: INVENTORY
+        commands:
+          give:
+            sender: CONSOLE
+            command: foreforgeadmin give {player} current-rider
+
+  foreforge_egyptian_all:
+    name: FoReforge - Any Egyptian Mob
+    event: MOB_KILL
+    cancel-vanilla-drops: false
+    priority: 0
+    stop-processing: false
+    conditions:
+      worlds: []
+      disabled-worlds: []
+      biomes: []
+      targets: []
+      required-plugins: [FoReforge]
+      entity-pdc:
+        'fodungeons:dungeon-type': [egyptian]
+        'fodungeons:mob-profile': ['*']
+      permission: ''
+      tools: []
+      silk-touch: IGNORE
+      fortune-min: 0
+      cooldown-ms: 0
+      weather: []
+    custom-drops:
+      dust-veil:
+        item-reward: false
+        send-message: false
+        respect-fortune: false
+        chance: 1.5
+        min-amount: 1
+        max-amount: 1
+        delivery-mode: INVENTORY
+        commands:
+          give:
+            sender: CONSOLE
+            command: foreforgeadmin give {player} dust-veil
+      egyptian-sifter:
+        item-reward: false
+        send-message: false
+        respect-fortune: false
+        chance: 1.5
+        min-amount: 1
+        max-amount: 1
+        delivery-mode: INVENTORY
+        commands:
+          give:
+            sender: CONSOLE
+            command: foreforgeadmin give {player} egyptian-sifter

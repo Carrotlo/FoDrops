@@ -9,6 +9,8 @@ import me.foesio.core.inventory.OverflowPolicy;
 import me.foesio.core.item.FoItemStacks;
 import me.foesio.core.sound.FoSoundService;
 import me.foesio.foDrops.FoDrops;
+import me.foesio.foDrops.api.FoDropEntryChanceEvent;
+import me.foesio.foDrops.api.FoDropEvaluationRollEvent;
 import me.foesio.foDrops.api.FoDropRewardEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -20,6 +22,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Locale;
@@ -78,30 +81,49 @@ public class DropEngine {
             return;
         }
 
+        FoDropEvaluationRollEvent rollEvent = new FoDropEvaluationRollEvent(
+            context.getPlayer(),
+            context.getEventType().name(),
+            context.getTargetTypeKey(),
+            evaluation.getMatchedDefinitions().stream().map(DropDefinition::getId).toList(),
+            context.getTargetPersistentData()
+        );
+        Bukkit.getPluginManager().callEvent(rollEvent);
+
         boolean deliveredAny = false;
         boolean rewardedAny = false;
         boolean attemptedItemDelivery = false;
-        for (DropDefinition definition : evaluation.getMatchedDefinitions()) {
-            for (CustomDropEntry entry : definition.getCustomDrops()) {
-                if (!entry.shouldDrop(random)) {
-                    continue;
-                }
+        int rolls = 1 + rollEvent.getAdditionalRolls();
+        for (int roll = 0; roll < rolls; roll++) {
+            boolean bonusRoll = roll > 0;
+            for (DropDefinition definition : evaluation.getMatchedDefinitions()) {
+                for (CustomDropEntry entry : definition.getCustomDrops()) {
+                    FoDropEntryChanceEvent chanceEvent = new FoDropEntryChanceEvent(
+                        context.getPlayer(), context.getEventType().name(), definition.getId(), entry.getId(),
+                        definition.getTags(), entry.getTags(), entry.getChance(), bonusRoll,
+                        context.getTargetPersistentData()
+                    );
+                    Bukkit.getPluginManager().callEvent(chanceEvent);
+                    if (!entry.shouldDrop(random, chanceEvent.getChance())) {
+                        continue;
+                    }
 
-                if (!entry.isItemReward()) {
-                    ItemStack marker = entry.getItem();
-                    runCommands(entry, context, marker);
-                    sendRewardMessage(entry, context, definition, marker);
-                    rewardedAny = true;
-                    continue;
-                }
+                    if (!entry.isItemReward()) {
+                        ItemStack marker = entry.getItem();
+                        runCommands(entry, context, marker);
+                        sendRewardMessage(entry, context, definition, marker);
+                        rewardedAny = true;
+                        continue;
+                    }
 
-                attemptedItemDelivery = true;
-                ItemStack built = entry.createDropItem(random, context.getFortuneLevel(), plugin.getMaxDropAmount());
-                if (deliverItem(entry.getDeliveryMode(), built, context, definition, groundTarget, world, location)) {
-                    deliveredAny = true;
-                    rewardedAny = true;
-                    runCommands(entry, context, built);
-                    sendRewardMessage(entry, context, definition, built);
+                    attemptedItemDelivery = true;
+                    ItemStack built = entry.createDropItem(random, context.getFortuneLevel(), plugin.getMaxDropAmount());
+                    if (deliverItem(entry.getDeliveryMode(), built, context, definition, groundTarget, world, location)) {
+                        deliveredAny = true;
+                        rewardedAny = true;
+                        runCommands(entry, context, built);
+                        sendRewardMessage(entry, context, definition, built);
+                    }
                 }
             }
         }
@@ -117,7 +139,27 @@ public class DropEngine {
         }
     }
 
+    /** Pure profile-tag match. It neither marks nor observes profile cooldowns. */
+    public boolean matchesProfileTag(DropContext context, String tag) {
+        if (context == null || tag == null || tag.isBlank()) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        for (DropDefinition definition : dropStore.getDropsForEvent(context.getEventType())) {
+            if (definition.hasTag(tag)
+                && matchesConditions(definition.getConditions(), context, definition.getId(), now, false)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean matchesConditions(DropConditions conditions, DropContext context, String profileId, long now) {
+        return matchesConditions(conditions, context, profileId, now, true);
+    }
+
+    private boolean matchesConditions(DropConditions conditions, DropContext context, String profileId, long now,
+                                      boolean respectCooldown) {
         if (conditions == null || !conditions.hasAnyRestrictions()) {
             return true;
         }
@@ -162,6 +204,21 @@ public class DropEngine {
             }
         }
 
+        if (!conditions.getRequiredPlugins().isEmpty()) {
+            for (String pluginName : conditions.getRequiredPlugins()) {
+                org.bukkit.plugin.Plugin required = Bukkit.getPluginManager().getPlugin(pluginName);
+                if (required == null || !required.isEnabled()) {
+                    return false;
+                }
+            }
+        }
+
+        if (!conditions.getEntityPersistentData().isEmpty()) {
+            if (!matchesPersistentData(conditions.getEntityPersistentData(), context.getTargetPersistentData())) {
+                return false;
+            }
+        }
+
         if (!conditions.getPermission().isBlank()) {
             Player player = context.getPlayer();
             if (player == null || !player.hasPermission(conditions.getPermission())) {
@@ -186,7 +243,7 @@ public class DropEngine {
             return false;
         }
 
-        if (conditions.getCooldownMs() > 0L && context.getPlayer() != null) {
+        if (respectCooldown && conditions.getCooldownMs() > 0L && context.getPlayer() != null) {
             Long lastTriggeredAt = getLastTriggeredAt(context.getPlayer().getUniqueId(), profileId);
             if (lastTriggeredAt != null && now - lastTriggeredAt < conditions.getCooldownMs()) {
                 return false;
@@ -220,6 +277,38 @@ public class DropEngine {
             }
         }
 
+        return true;
+    }
+
+    static boolean matchesPersistentData(Map<String, java.util.List<String>> requirements,
+                                         Map<String, String> actual) {
+        if (requirements == null || requirements.isEmpty()) {
+            return true;
+        }
+        Map<String, String> values = actual == null ? Map.of() : actual;
+        for (Map.Entry<String, java.util.List<String>> requirement : requirements.entrySet()) {
+            String expectedKey = requirement.getKey() == null
+                ? "" : requirement.getKey().toLowerCase(Locale.ROOT);
+            String value = values.get(expectedKey);
+            if (value == null) {
+                value = values.entrySet().stream()
+                    .filter(entry -> entry.getKey() != null && entry.getKey().equalsIgnoreCase(expectedKey))
+                    .map(Map.Entry::getValue)
+                    .findFirst()
+                    .orElse(null);
+            }
+            if (value == null) {
+                return false;
+            }
+            String actualValue = value.toLowerCase(Locale.ROOT);
+            boolean matched = requirement.getValue() != null && requirement.getValue().stream()
+                .filter(java.util.Objects::nonNull)
+                .map(candidate -> candidate.toLowerCase(Locale.ROOT))
+                .anyMatch(candidate -> candidate.equals("*") || candidate.equals(actualValue));
+            if (!matched) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -491,7 +580,14 @@ public class DropEngine {
             return;
         }
 
-        Bukkit.dispatchCommand(sender, normalized);
+        try {
+            if (!Bukkit.dispatchCommand(sender, normalized)) {
+                plugin.getLogger().warning("Drop reward command was unknown or rejected: " + normalized);
+            }
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(java.util.logging.Level.WARNING,
+                "Drop reward command failed: " + normalized, exception);
+        }
     }
 
     private void sendRewardMessage(CustomDropEntry entry, DropContext context, DropDefinition definition, ItemStack itemStack) {

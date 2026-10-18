@@ -15,12 +15,16 @@ import me.foesio.core.sound.FoEditorSounds;
 import me.foesio.core.sound.FoSoundService;
 import me.foesio.core.update.UpdateNoticeService;
 import me.foesio.foDrops.command.FoDropsCommand;
+import me.foesio.foDrops.api.FoDropsApi;
+import me.foesio.foDrops.api.FoDropsApiImpl;
+import me.foesio.foDrops.drop.DropEngine;
 import me.foesio.foDrops.drop.DropStore;
 import me.foesio.foDrops.editor.EditorManager;
 import me.foesio.foDrops.listener.DropListener;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.ServicePriority;
 
 import java.io.File;
 
@@ -67,7 +71,10 @@ public final class FoDrops extends JavaPlugin {
 
         editorManager = new EditorManager(this, dropStore, core, editorSounds);
         getServer().getPluginManager().registerEvents(editorManager, this);
-        getServer().getPluginManager().registerEvents(new DropListener(this, dropStore, core, sounds), this);
+        DropEngine dropEngine = new DropEngine(this, dropStore, core.inventoryDeposits(), sounds);
+        getServer().getPluginManager().registerEvents(new DropListener(dropEngine, core), this);
+        getServer().getServicesManager().register(FoDropsApi.class, new FoDropsApiImpl(dropEngine), this,
+            ServicePriority.Normal);
 
         FoDropsCommand command = new FoDropsCommand(this, dropStore, editorManager, updateNotices, adminSounds);
         if (getCommand("fodrops") != null) {
@@ -80,6 +87,7 @@ public final class FoDrops extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        getServer().getServicesManager().unregisterAll(this);
         if (dropStore != null) {
             dropStore.save();
         }

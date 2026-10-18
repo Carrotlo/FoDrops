@@ -70,6 +70,9 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -407,6 +410,9 @@ public class EditorManager implements Listener {
             "{white}Click to edit entry list."
         ));
         inventory.setItem(20, button(player, Material.LAVA_BUCKET, "{bad}Delete Drop", "{white}Remove this drop profile."));
+        inventory.setItem(21, button(player, Material.NAME_TAG, "{theme}Integration Tags",
+            "{white}Current: " + formatList(new ArrayList<>(definition.getTags()), 4),
+            "", "{white}Comma-separated owner tags."));
         inventory.setItem(GuiSlots.bottomMiddleSlot(4), buttons.back(player));
 
         fillBackground(inventory);
@@ -612,6 +618,23 @@ public class EditorManager implements Listener {
             "{white}{theme}0 {white}= disabled.",
             "{white}Click to set value in chat."
         ));
+        inventory.setItem(21, button(player,
+            Material.COMMAND_BLOCK,
+            "{theme}Required Plugins",
+            "{white}" + formatList(conditions.getRequiredPlugins(), 4),
+            "",
+            "{white}Every named plugin must be enabled.",
+            "{white}Enter comma-separated names or {theme}none{white}."
+        ));
+        inventory.setItem(22, button(player,
+            Material.STRUCTURE_BLOCK,
+            "{theme}Entity PDC",
+            "{white}" + formatPdcConditions(conditions),
+            "",
+            "{white}Format: {theme}namespace:key=value1|value2",
+            "{white}Use {theme}* {white}to require any stored value.",
+            "{white}Separate multiple keys with commas."
+        ));
         inventory.setItem(GuiSlots.bottomMiddleSlot(4), buttons.back(player));
 
         fillBackground(inventory);
@@ -774,6 +797,9 @@ public class EditorManager implements Listener {
                 : "{white}Click to toggle."
         ));
         inventory.setItem(22, button(player, Material.LAVA_BUCKET, "{bad}Delete Entry", "{white}Remove this custom drop entry."));
+        inventory.setItem(21, button(player, Material.NAME_TAG, "{theme}Integration Tags",
+            "{white}Current: " + formatList(new ArrayList<>(entry.getTags()), 4),
+            "", "{white}Comma-separated owner tags."));
         inventory.setItem(GuiSlots.bottomMiddleSlot(4), buttons.back(player));
 
         fillBackground(inventory);
@@ -1145,6 +1171,9 @@ public class EditorManager implements Listener {
             return;
         }
 
+        if (holder.actionAt(event.getSlot()) == null) {
+            return;
+        }
         Optional<ConfigEditorButton> clicked = settingsEditor().buttonAt(holder, event.getSlot());
         if (clicked.isEmpty()) {
             return;
@@ -1285,6 +1314,10 @@ public class EditorManager implements Listener {
         if (slot == 20) {
             editorSounds.open(player);
             openDeleteConfirmMenu(player, definition.getId());
+            return;
+        }
+        if (slot == 21) {
+            startPrompt(player, PromptType.PROFILE_TAGS, definition.getId(), -1, 0, -1, 0);
             return;
         }
         if (slot == GuiSlots.bottomMiddleSlot(4)) {
@@ -1533,6 +1566,19 @@ public class EditorManager implements Listener {
         }
         if (slot == 20) {
             startPrompt(player, PromptType.CONDITION_COOLDOWN, definition.getId(), -1, 0, -1, 0);
+            return;
+        }
+        if (slot == 21) {
+            startPrompt(player, PromptType.CONDITION_REQUIRED_PLUGINS, definition.getId(), -1, 0, -1, 0);
+            return;
+        }
+        if (slot == 22) {
+            startPrompt(player, PromptType.CONDITION_ENTITY_PDC, definition.getId(), -1, 0, -1, 0);
+            return;
+        }
+        if (slot == 21) {
+            startPrompt(player, PromptType.ENTRY_TAGS, definition.getId(), menu.selectedIndex,
+                menu.returnPage, -1, menu.returnPage);
             return;
         }
         if (slot == GuiSlots.bottomMiddleSlot(4)) {
@@ -1905,6 +1951,15 @@ public class EditorManager implements Listener {
                 plugin.messages().sendConfigured(player, "drop-priority-updated", "{priority}", String.valueOf(value));
                 openDropMenu(player, definition.getId());
             }
+            case PROFILE_TAGS -> {
+                definition.getTags().clear();
+                definition.getTags().addAll(normalizedTags(input));
+                dropStore.save();
+                editorSounds.save(player);
+                chatPrompts.remove(player.getUniqueId());
+                plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "integration tags");
+                openDropMenu(player, definition.getId());
+            }
             case CHANCE -> {
                 CustomDropEntry entry = getPromptEntry(player, definition, prompt);
                 if (entry == null) {
@@ -1947,6 +2002,17 @@ public class EditorManager implements Listener {
                 plugin.messages().sendConfigured(player, "custom-drop-amount-updated",
                     "{min}", String.valueOf(amountRange[0]),
                     "{max}", String.valueOf(amountRange[1]));
+                openCustomDropEntryMenu(player, definition.getId(), prompt.entryIndex, prompt.returnPage);
+            }
+            case ENTRY_TAGS -> {
+                CustomDropEntry entry = getPromptEntry(player, definition, prompt);
+                if (entry == null) return;
+                entry.getTags().clear();
+                entry.getTags().addAll(normalizedTags(input));
+                dropStore.save();
+                editorSounds.save(player);
+                chatPrompts.remove(player.getUniqueId());
+                plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "entry integration tags");
                 openCustomDropEntryMenu(player, definition.getId(), prompt.entryIndex, prompt.returnPage);
             }
             case CONDITION_WORLDS -> {
@@ -2053,6 +2119,30 @@ public class EditorManager implements Listener {
                 editorSounds.save(player);
                 chatPrompts.remove(player.getUniqueId());
                 plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "cooldown-ms");
+                openConditionsMenu(player, definition.getId());
+            }
+            case CONDITION_REQUIRED_PLUGINS -> {
+                List<String> plugins = parseSimpleList(input, false, false);
+                definition.getConditions().getRequiredPlugins().clear();
+                definition.getConditions().getRequiredPlugins().addAll(plugins);
+                dropStore.save();
+                editorSounds.save(player);
+                chatPrompts.remove(player.getUniqueId());
+                plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "required-plugins");
+                openConditionsMenu(player, definition.getId());
+            }
+            case CONDITION_ENTITY_PDC -> {
+                Map<String, List<String>> values = parsePdcConditions(input);
+                if (values == null) {
+                    rejectPromptInput(player, prompt, "prompt-pdc-format");
+                    return;
+                }
+                definition.getConditions().getEntityPersistentData().clear();
+                definition.getConditions().getEntityPersistentData().putAll(values);
+                dropStore.save();
+                editorSounds.save(player);
+                chatPrompts.remove(player.getUniqueId());
+                plugin.messages().sendConfigured(player, "condition-updated", "{condition}", "entity-pdc");
                 openConditionsMenu(player, definition.getId());
             }
             case COMMAND_DROP_ADD -> {
@@ -2211,12 +2301,13 @@ public class EditorManager implements Listener {
             case MAIN_SEARCH -> reopenEntryBrowser(player, new MainBrowserContext(), prompt.filter, prompt.page, prompt.page);
             case CUSTOM_SEARCH -> reopenEntryBrowser(player, new CustomBrowserContext(prompt.dropId), prompt.filter, prompt.page, prompt.returnPage);
             case COMMAND_SEARCH -> reopenEntryBrowser(player, new CommandBrowserContext(prompt.dropId, prompt.entryIndex, prompt.returnPage), prompt.filter, prompt.page, prompt.returnPage);
-            case RENAME, PRIORITY -> openDropMenu(player, prompt.dropId);
-            case CHANCE, AMOUNT -> openCustomDropEntryMenu(player, prompt.dropId, prompt.entryIndex, prompt.returnPage);
+            case RENAME, PRIORITY, PROFILE_TAGS -> openDropMenu(player, prompt.dropId);
+            case CHANCE, AMOUNT, ENTRY_TAGS -> openCustomDropEntryMenu(player, prompt.dropId, prompt.entryIndex, prompt.returnPage);
             case CONDITION_TARGETS -> openDropMenu(player, prompt.dropId);
             case MOB_TARGET_SEARCH -> openMobTargetSelector(player, prompt.dropId, prompt.page, prompt.filter);
             case WORLD_SEARCH -> openWorldSelector(player, prompt.dropId, prompt.page, prompt.filter);
-            case CONDITION_WORLDS, CONDITION_BIOMES, CONDITION_PERMISSION, CONDITION_TOOLS, CONDITION_FORTUNE, CONDITION_TIME, CONDITION_WEATHER, CONDITION_COOLDOWN ->
+            case CONDITION_WORLDS, CONDITION_BIOMES, CONDITION_PERMISSION, CONDITION_TOOLS, CONDITION_FORTUNE,
+                 CONDITION_TIME, CONDITION_WEATHER, CONDITION_COOLDOWN, CONDITION_REQUIRED_PLUGINS, CONDITION_ENTITY_PDC ->
                 openConditionsMenu(player, prompt.dropId);
             case COMMAND_DROP_ADD -> openAddCustomDropMenu(player, prompt.dropId, prompt.returnPage);
             case COMMAND_ADD, COMMAND_EDIT -> openCommandMenu(player, prompt.dropId, prompt.entryIndex, prompt.page, prompt.returnPage);
@@ -2345,6 +2436,7 @@ public class EditorManager implements Listener {
             case ADD_DROP -> "prompt-add-drop";
             case RENAME -> "prompt-rename";
             case PRIORITY -> "prompt-priority";
+            case PROFILE_TAGS, ENTRY_TAGS -> "prompt-tags";
             case CHANCE -> "prompt-chance";
             case AMOUNT -> "prompt-amount";
             case CONDITION_TARGETS -> "prompt-targets";
@@ -2356,6 +2448,8 @@ public class EditorManager implements Listener {
             case CONDITION_TIME -> "prompt-time";
             case CONDITION_WEATHER -> "prompt-weather";
             case CONDITION_COOLDOWN -> "prompt-cooldown";
+            case CONDITION_REQUIRED_PLUGINS -> "prompt-required-plugins";
+            case CONDITION_ENTITY_PDC -> "prompt-entity-pdc";
             case COMMAND_DROP_ADD -> "prompt-command-drop-add";
             case COMMAND_ADD -> "prompt-command-add";
             case COMMAND_EDIT -> "prompt-command-edit";
@@ -2420,8 +2514,10 @@ public class EditorManager implements Listener {
             case ADD_DROP -> "Bonus Diamonds";
             case RENAME -> "Bonus Diamonds";
             case PRIORITY -> "0";
+            case PROFILE_TAGS -> "reforge-eligible, reforge-ore";
             case CHANCE -> "50";
             case AMOUNT -> "1-3";
+            case ENTRY_TAGS -> "reforge-token";
             case CONDITION_TARGETS -> "stone, deepslate";
             case CONDITION_WORLDS -> "world, world_nether";
             case CONDITION_BIOMES -> "plains, forest";
@@ -2431,6 +2527,8 @@ public class EditorManager implements Listener {
             case CONDITION_TIME -> "1000-12000";
             case CONDITION_WEATHER -> "clear, rain";
             case CONDITION_COOLDOWN -> "5000";
+            case CONDITION_REQUIRED_PLUGINS -> "FoReforge";
+            case CONDITION_ENTITY_PDC -> "fodungeons:mob-profile=egyptian_cat";
             case COMMAND_DROP_ADD, COMMAND_ADD -> "console give {player} diamond 1";
             case COMMAND_EDIT -> "give {player} diamond 1";
             case CONFIG_MAX_PROFILES -> "100";
@@ -2474,8 +2572,10 @@ public class EditorManager implements Listener {
             case ADD_DROP -> "Name Drop";
             case RENAME -> "Rename Drop";
             case PRIORITY -> "Set Priority";
+            case PROFILE_TAGS -> "Set Profile Tags";
             case CHANCE -> "Set Drop Chance";
             case AMOUNT -> "Set Amount Range";
+            case ENTRY_TAGS -> "Set Entry Tags";
             case CONDITION_TARGETS -> "Set Targets";
             case CONDITION_WORLDS -> "Set Worlds";
             case CONDITION_BIOMES -> "Set Biomes";
@@ -2485,6 +2585,8 @@ public class EditorManager implements Listener {
             case CONDITION_TIME -> "Set Time Range";
             case CONDITION_WEATHER -> "Set Weather";
             case CONDITION_COOLDOWN -> "Set Cooldown";
+            case CONDITION_REQUIRED_PLUGINS -> "Set Required Plugins";
+            case CONDITION_ENTITY_PDC -> "Set Entity PDC";
             case COMMAND_DROP_ADD -> "Add Command Reward";
             case COMMAND_ADD -> "Add Command";
             case COMMAND_EDIT -> "Edit Command";
@@ -2503,6 +2605,7 @@ public class EditorManager implements Listener {
             case ADD_DROP -> "Enter the initial drop profile name.";
             case RENAME -> "Enter the profile display name.";
             case PRIORITY -> "Enter priority as an integer.";
+            case PROFILE_TAGS, ENTRY_TAGS -> "Enter lowercase integration tags separated by commas, or none.";
             case CHANCE -> "Enter chance from 0 to 100.";
             case AMOUNT -> "Enter a single amount or min-max. Max: {max}.";
             case CONDITION_TARGETS -> "Enter target keys separated by commas, or none.";
@@ -2514,6 +2617,8 @@ public class EditorManager implements Listener {
             case CONDITION_TIME -> "Enter min-max from 0 to 23999, or none.";
             case CONDITION_WEATHER -> "Enter clear, rain, thunder separated by commas, or none.";
             case CONDITION_COOLDOWN -> "Enter cooldown in milliseconds. Use 0 to disable.";
+            case CONDITION_REQUIRED_PLUGINS -> "Enter plugin names separated by commas, or none.";
+            case CONDITION_ENTITY_PDC -> "Enter namespace:key=value1|value2 entries separated by commas, or none.";
             case COMMAND_DROP_ADD, COMMAND_ADD -> "Use format: <console|player> <command>.";
             case COMMAND_EDIT -> "Enter the command text.";
             case CONFIG_MAX_PROFILES, CONFIG_MAX_CUSTOM_DROPS, CONFIG_MAX_COMMANDS, CONFIG_MAX_DROP_AMOUNT ->
@@ -2526,6 +2631,7 @@ public class EditorManager implements Listener {
             case MOB_TARGET_SEARCH, WORLD_SEARCH, MAIN_SEARCH, CUSTOM_SEARCH, COMMAND_SEARCH -> "Search";
             case ADD_DROP, RENAME -> "Name";
             case PRIORITY -> "Priority";
+            case PROFILE_TAGS, ENTRY_TAGS -> "Tags";
             case CHANCE -> "Chance";
             case AMOUNT -> "Amount";
             case CONDITION_TARGETS -> "Targets";
@@ -2537,6 +2643,8 @@ public class EditorManager implements Listener {
             case CONDITION_TIME -> "Time";
             case CONDITION_WEATHER -> "Weather";
             case CONDITION_COOLDOWN -> "Cooldown";
+            case CONDITION_REQUIRED_PLUGINS -> "Required Plugins";
+            case CONDITION_ENTITY_PDC -> "Entity PDC";
             case COMMAND_DROP_ADD, COMMAND_ADD, COMMAND_EDIT -> "Command";
             case CONFIG_MAX_PROFILES, CONFIG_MAX_CUSTOM_DROPS, CONFIG_MAX_COMMANDS, CONFIG_MAX_DROP_AMOUNT -> "Value";
         };
@@ -2562,8 +2670,10 @@ public class EditorManager implements Listener {
             case ADD_DROP -> "";
             case RENAME -> definition.getName();
             case PRIORITY -> String.valueOf(definition.getPriority());
+            case PROFILE_TAGS -> joinOrNone(new ArrayList<>(definition.getTags()));
             case CHANCE -> entry == null ? "" : trimChance(entry.getChance());
             case AMOUNT -> entry == null ? "" : entry.getMinAmount() + "-" + entry.getMaxAmount();
+            case ENTRY_TAGS -> entry == null ? "" : joinOrNone(new ArrayList<>(entry.getTags()));
             case CONDITION_TARGETS -> joinOrNone(conditions.getTargets());
             case CONDITION_WORLDS -> joinOrNone(conditions.getWorlds());
             case CONDITION_BIOMES -> joinOrNone(conditions.getBiomes());
@@ -2575,6 +2685,8 @@ public class EditorManager implements Listener {
                 ? "none"
                 : conditions.getWeather().stream().map(weather -> weather.name().toLowerCase(Locale.ROOT)).collect(Collectors.joining(", "));
             case CONDITION_COOLDOWN -> String.valueOf(conditions.getCooldownMs());
+            case CONDITION_REQUIRED_PLUGINS -> joinOrNone(conditions.getRequiredPlugins());
+            case CONDITION_ENTITY_PDC -> pdcPromptValue(conditions);
             case COMMAND_DROP_ADD, COMMAND_ADD -> "";
             case COMMAND_EDIT -> currentCommandValue(entry, prompt.commandIndex);
             case CONFIG_MAX_PROFILES, CONFIG_MAX_CUSTOM_DROPS, CONFIG_MAX_COMMANDS, CONFIG_MAX_DROP_AMOUNT -> "";
@@ -2600,6 +2712,50 @@ public class EditorManager implements Listener {
             return "none";
         }
         return String.join(", ", values);
+    }
+
+    private String formatPdcConditions(DropConditions conditions) {
+        if (conditions.getEntityPersistentData().isEmpty()) {
+            return "{muted}None";
+        }
+        return "{theme}" + conditions.getEntityPersistentData().size() + " key(s)";
+    }
+
+    private String pdcPromptValue(DropConditions conditions) {
+        if (conditions.getEntityPersistentData().isEmpty()) {
+            return "none";
+        }
+        return conditions.getEntityPersistentData().entrySet().stream()
+            .map(entry -> entry.getKey() + "=" + String.join("|", entry.getValue()))
+            .collect(Collectors.joining(", "));
+    }
+
+    private Map<String, List<String>> parsePdcConditions(String raw) {
+        Map<String, List<String>> parsed = new LinkedHashMap<>();
+        if (raw == null || raw.isBlank() || raw.equalsIgnoreCase("none")) {
+            return parsed;
+        }
+        for (String token : raw.split(",")) {
+            String entry = token.trim();
+            int separator = entry.indexOf('=');
+            if (separator <= 0 || separator >= entry.length() - 1) {
+                return null;
+            }
+            String key = entry.substring(0, separator).trim().toLowerCase(Locale.ROOT);
+            if (!key.matches("[a-z0-9._-]+:[a-z0-9/._-]+")) {
+                return null;
+            }
+            List<String> values = Arrays.stream(entry.substring(separator + 1).split("\\|"))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .distinct()
+                .toList();
+            if (values.isEmpty()) {
+                return null;
+            }
+            parsed.put(key, values);
+        }
+        return parsed;
     }
 
     private int[] parseAmountRange(String raw, int maxAllowed) {
@@ -2673,6 +2829,14 @@ public class EditorManager implements Listener {
             }
         }
         return values;
+    }
+
+    private Set<String> normalizedTags(String input) {
+        Set<String> tags = new LinkedHashSet<>();
+        for (String value : parseSimpleList(input, true, false)) {
+            if (value.matches("[a-z0-9][a-z0-9._-]{0,63}")) tags.add(value);
+        }
+        return tags;
     }
 
     private List<String> parseToolList(String input) {
@@ -2940,8 +3104,10 @@ public class EditorManager implements Listener {
         ADD_DROP,
         RENAME,
         PRIORITY,
+        PROFILE_TAGS,
         CHANCE,
         AMOUNT,
+        ENTRY_TAGS,
         CONDITION_TARGETS,
         CONDITION_WORLDS,
         CONDITION_BIOMES,
@@ -2951,6 +3117,8 @@ public class EditorManager implements Listener {
         CONDITION_TIME,
         CONDITION_WEATHER,
         CONDITION_COOLDOWN,
+        CONDITION_REQUIRED_PLUGINS,
+        CONDITION_ENTITY_PDC,
         COMMAND_DROP_ADD,
         COMMAND_ADD,
         COMMAND_EDIT,

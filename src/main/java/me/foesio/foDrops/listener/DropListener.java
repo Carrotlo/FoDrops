@@ -15,6 +15,7 @@ import me.foesio.foDrops.drop.DropStore;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.Biome;
@@ -45,6 +46,8 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerShearEntityEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.projectiles.ProjectileSource;
 
 import java.util.HashMap;
@@ -63,6 +66,11 @@ public class DropListener implements Listener {
     public DropListener(FoDrops plugin, DropStore dropStore, FoCoreContext core, FoSoundService sounds) {
         this.inventoryDeposits = core.inventoryDeposits();
         this.dropEngine = new DropEngine(plugin, dropStore, inventoryDeposits, sounds);
+    }
+
+    public DropListener(DropEngine dropEngine, FoCoreContext core) {
+        this.inventoryDeposits = core.inventoryDeposits();
+        this.dropEngine = dropEngine;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -102,7 +110,8 @@ public class DropListener implements Listener {
             player,
             event.getEntity().getLocation(),
             player.getInventory().getItemInMainHand(),
-            event.getEntityType().name()
+            event.getEntityType().name(),
+            event.getEntity()
         );
         DropEvaluation evaluation = dropEngine.evaluate(context);
         if (evaluation.getMatchedDefinitions().isEmpty()) {
@@ -340,6 +349,11 @@ public class DropListener implements Listener {
     }
 
     private DropContext createContext(DropEventType eventType, Player player, Location location, ItemStack tool, String targetTypeKey) {
+        return createContext(eventType, player, location, tool, targetTypeKey, null);
+    }
+
+    private DropContext createContext(DropEventType eventType, Player player, Location location, ItemStack tool,
+                                      String targetTypeKey, Entity targetEntity) {
         World world = null;
         Biome biome = null;
         if (location != null) {
@@ -355,7 +369,38 @@ public class DropListener implements Listener {
 
         int silk = DropEngine.getSilkTouchLevel(tool);
         int fortune = DropEngine.getFortuneLevel(tool);
-        return new DropContext(eventType, player, location, world, biome, tool, silk, fortune, targetTypeKey);
+        Map<String, String> persistentData = targetEntity == null
+            ? Map.of()
+            : readStringPersistentData(targetEntity.getPersistentDataContainer());
+        return new DropContext(eventType, player, location, world, biome, tool, silk, fortune,
+            targetTypeKey, persistentData);
+    }
+
+    /**
+     * Copies only string-backed entity metadata into drop contexts. Other plugins may store
+     * compounds, integers, byte arrays, or custom primitive types in the same container; asking
+     * Bukkit to decode those values as strings throws instead of returning {@code null}.
+     */
+    static Map<String, String> readStringPersistentData(PersistentDataContainer container) {
+        Map<String, String> values = new HashMap<>();
+        if (container == null) {
+            return values;
+        }
+        for (NamespacedKey key : container.getKeys()) {
+            try {
+                if (!container.has(key, PersistentDataType.STRING)) {
+                    continue;
+                }
+                String value = container.get(key, PersistentDataType.STRING);
+                if (value != null) {
+                    values.put(key.toString().toLowerCase(java.util.Locale.ROOT), value);
+                }
+            } catch (IllegalArgumentException | ClassCastException | UnsupportedOperationException ignored) {
+                // A third-party adapter can expose a key whose backing type cannot be inspected
+                // through Bukkit's STRING adapter. It is irrelevant to string-based conditions.
+            }
+        }
+        return values;
     }
 
     private Location centered(Location location) {
@@ -572,7 +617,8 @@ public class DropListener implements Listener {
 
     private boolean isPlayerTriggeredExplosive(Material material) {
         String name = material.name();
-        return name.endsWith("_BED") || name.equals("RESPAWN_ANCHOR");
+        // Straw beds break without exploding in 26.3.
+        return (name.endsWith("_BED") && !name.equals("STRAW_BED")) || name.equals("RESPAWN_ANCHOR");
     }
 
     private ItemStack cloneTool(ItemStack tool) {
