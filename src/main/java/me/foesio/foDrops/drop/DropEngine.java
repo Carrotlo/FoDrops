@@ -11,6 +11,8 @@ import me.foesio.core.sound.FoSoundService;
 import me.foesio.foDrops.FoDrops;
 import me.foesio.foDrops.api.FoDropEntryChanceEvent;
 import me.foesio.foDrops.api.FoDropEvaluationRollEvent;
+import me.foesio.foDrops.api.FoDropItemRewardProcessedEvent;
+import me.foesio.foDrops.api.FoDropProfileSelectEvent;
 import me.foesio.foDrops.api.FoDropRewardEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -58,6 +60,15 @@ public class DropEngine {
 
         for (DropDefinition definition : dropStore.getDropsForEvent(context.getEventType())) {
             if (!matchesConditions(definition.getConditions(), context, definition.getId(), now)) {
+                continue;
+            }
+
+            FoDropProfileSelectEvent selectEvent = new FoDropProfileSelectEvent(
+                context.getPlayer(), context.getEventType().name(), definition.getId(),
+                definition.getTags(), context.getTargetTypeKey(), context.getLocation(),
+                context.getTargetPersistentData());
+            Bukkit.getPluginManager().callEvent(selectEvent);
+            if (selectEvent.isCancelled()) {
                 continue;
             }
 
@@ -118,7 +129,7 @@ public class DropEngine {
 
                     attemptedItemDelivery = true;
                     ItemStack built = entry.createDropItem(random, context.getFortuneLevel(), plugin.getMaxDropAmount());
-                    if (deliverItem(entry.getDeliveryMode(), built, context, definition, groundTarget, world, location)) {
+                    if (deliverItem(entry.getDeliveryMode(), built, context, definition, entry, groundTarget, world, location)) {
                         deliveredAny = true;
                         rewardedAny = true;
                         runCommands(entry, context, built);
@@ -421,6 +432,7 @@ public class DropEngine {
         ItemStack itemStack,
         DropContext context,
         DropDefinition definition,
+        CustomDropEntry entry,
         Collection<ItemStack> groundTarget,
         World world,
         Location location
@@ -437,6 +449,7 @@ public class DropEngine {
             FoDropRewardEvent event = new FoDropRewardEvent(
                 context.getEventType().name(),
                 definition.getId(),
+                entry.getId(),
                 definition.getName(),
                 mode.name(),
                 context.getTargetTypeKey(),
@@ -448,20 +461,39 @@ public class DropEngine {
             if (event.isCancelled()) {
                 if (event.isHandled()) {
                     deliveredAny = true;
+                    ItemStack handled = event.getItemStack();
+                    if (validRewardItem(handled)) {
+                        fireProcessedReward(event, handled,
+                            FoDropItemRewardProcessedEvent.Outcome.HANDLED_EXTERNALLY);
+                    }
                 }
                 continue;
             }
 
             ItemStack finalChunk = event.getItemStack();
-            if (finalChunk == null || finalChunk.getType() == Material.AIR || finalChunk.getAmount() <= 0) {
+            if (!validRewardItem(finalChunk)) {
                 continue;
             }
 
             if (deliverStack(mode, finalChunk, player, groundTarget, world, location)) {
                 deliveredAny = true;
+                fireProcessedReward(event, finalChunk,
+                    FoDropItemRewardProcessedEvent.Outcome.DELIVERED_BY_FODROPS);
             }
         }
         return deliveredAny;
+    }
+
+    private boolean validRewardItem(ItemStack item) {
+        return item != null && item.getType() != Material.AIR && item.getAmount() > 0;
+    }
+
+    private void fireProcessedReward(FoDropRewardEvent source, ItemStack item,
+                                     FoDropItemRewardProcessedEvent.Outcome outcome) {
+        Bukkit.getPluginManager().callEvent(new FoDropItemRewardProcessedEvent(
+            source.getEventType(), source.getProfileId(), source.getEntryId(),
+            source.getTargetTypeKey(), source.getDeliveryMode(), source.getPlayer(),
+            source.getLocation(), item, outcome));
     }
 
     private boolean deliverStack(

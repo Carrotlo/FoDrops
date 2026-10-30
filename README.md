@@ -60,13 +60,66 @@ Main config areas: `limits`, `safety`, `native-dialogs`.
 <details>
 <summary><strong>Developer API</strong></summary>
 
-`FoDropRewardEvent` is cancellable and lets integrations inspect, replace, or fully handle a pending reward.
+Build against the matching FoDrops jar as a provided dependency; do not shade it into a consumer.
+For example, place the built `FoDrops-2.6.jar` in `libs/` and use
+`compileOnly(files("libs/FoDrops-2.6.jar"))` in Gradle. Add `softdepend: [FoDrops]`
+to a Bukkit `plugin.yml`, or `depend: [FoDrops]` when FoDrops is required. Keep
+direct references in a separate integration class loaded only when FoDrops is
+enabled. The service is registered during enable and removed during disable;
+look it up again after a provider restart.
+
+`FoDropsApi` is available through Bukkit's services manager. Its methods require
+the primary server thread; never call them from an async worker. The block-tag
+query checks active profile conditions without observing or starting cooldowns.
+It does not predict whether `stop-processing` or a selection veto will prevent
+the profile from being selected. Snapshots copy active in-memory profile and
+entry metadata, omitting conditions and commands. They do not read `drops.yml`
+directly and do not change after they are returned. A disabled provider returns
+`false`/empty snapshots or `UNAVAILABLE` from `trigger`.
 
 ~~~java
-@EventHandler
-public void onDropReward(FoDropRewardEvent event) {
-    event.setItemStack(event.getItemStack());
+FoDropsApi api = Bukkit.getServicesManager().load(FoDropsApi.class);
+if (api != null) {
+    boolean tagged = api.matchesBlockProfileTag(player, block, tool, "my-tag");
+    List<FoDropProfileSnapshot> profiles = api.getProfiles();
+    FoDropTriggerResult result = api.trigger(new FoDropTriggerRequest(
+        "BLOCK_BREAK", player, block.getLocation(), tool, block.getType().name(), Map.of()));
 }
 ~~~
+
+`trigger` evaluates configured profiles using the supplied context and runs
+FoDrops' normal reward path. Call it only from the primary server thread for a
+separate activity that FoDrops does not already process; otherwise rewards can
+be duplicated. It rejects unknown event types and locations without worlds.
+`PROCESSED` means at least one profile was selected, not that a random item was
+won. `NO_MATCH` also covers profiles vetoed by listeners; `REENTRANT` rejects
+a nested trigger call made during another trigger's events. The result's
+`wouldCancelVanillaDrops` is information for the caller; the API never modifies
+the caller's Bukkit event. The request and result copy their mutable values.
+
+Events fire in the caller's event context, synchronously and on the same thread.
+Consumers must follow Bukkit's world/player thread rules. Timing:
+
+- `FoDropProfileSelectEvent`: per eligible profile, after condition matching but
+  before selection, cooldown marking, `stop-processing`, or vanilla-drop changes.
+  Cancellation skips only that profile.
+- `FoDropEvaluationRollEvent`: after selection, before entry rolls; permits up to
+  eight additional reruns of the selected profiles. The list can be empty on
+  the explosion-death path.
+- `FoDropEntryChanceEvent`: before each entry chance roll, including bonus rolls;
+  listeners may adjust chance from 0 to 100.
+- `FoDropRewardEvent`: before each item reward chunk is delivered. Listeners may
+  replace the item, cancel it, or cancel and set `handled` after taking delivery
+  themselves. `setHandled(true)` alone does not stop FoDrops delivery. Its new
+  `getEntryId()` identifies the configured entry; the old constructor remains.
+- `FoDropItemRewardProcessedEvent`: after FoDrops delivers a valid chunk or a
+  listener cancels and marks it handled. Its outcome distinguishes FoDrops
+  delivery from external handoff. The event is informational and cannot cancel
+  delivery. Ground rewards added to another Bukkit event's drop list may still
+  be changed later by that event's other listeners.
+
+`FoDropRewardEvent` and the processed event cover item rewards only. Command-only
+rewards do not fire them. Event locations and items are defensive copies; profile
+and entry IDs are stable identifiers within the current `drops.yml` configuration.
 
 </details>

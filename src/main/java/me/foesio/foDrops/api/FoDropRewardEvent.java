@@ -13,6 +13,7 @@ public class FoDropRewardEvent extends Event implements Cancellable {
 
     private final String eventType;
     private final String profileId;
+    private final String entryId;
     private final String profileName;
     private final String deliveryMode;
     private final String targetTypeKey;
@@ -32,8 +33,23 @@ public class FoDropRewardEvent extends Event implements Cancellable {
         Location location,
         ItemStack itemStack
     ) {
+        this(eventType, profileId, "", profileName, deliveryMode, targetTypeKey, player, location, itemStack);
+    }
+
+    public FoDropRewardEvent(
+        String eventType,
+        String profileId,
+        String entryId,
+        String profileName,
+        String deliveryMode,
+        String targetTypeKey,
+        Player player,
+        Location location,
+        ItemStack itemStack
+    ) {
         this.eventType = eventType;
         this.profileId = profileId;
+        this.entryId = entryId == null ? "" : entryId;
         this.profileName = profileName;
         this.deliveryMode = deliveryMode;
         this.targetTypeKey = targetTypeKey;
@@ -67,6 +83,11 @@ public class FoDropRewardEvent extends Event implements Cancellable {
 
     public String getProfileId() {
         return profileId;
+    }
+
+    /** Entry ID, or an empty string when constructed by the legacy constructor. */
+    public String getEntryId() {
+        return entryId;
     }
 
     public String getProfileName() {

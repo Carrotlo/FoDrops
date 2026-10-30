@@ -73,7 +73,7 @@ public final class FoDrops extends JavaPlugin {
         getServer().getPluginManager().registerEvents(editorManager, this);
         DropEngine dropEngine = new DropEngine(this, dropStore, core.inventoryDeposits(), sounds);
         getServer().getPluginManager().registerEvents(new DropListener(dropEngine, core), this);
-        getServer().getServicesManager().register(FoDropsApi.class, new FoDropsApiImpl(dropEngine), this,
+        getServer().getServicesManager().register(FoDropsApi.class, new FoDropsApiImpl(this, dropEngine, dropStore), this,
             ServicePriority.Normal);
 
         FoDropsCommand command = new FoDropsCommand(this, dropStore, editorManager, updateNotices, adminSounds);
